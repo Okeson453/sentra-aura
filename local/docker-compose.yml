@@ -1,0 +1,266 @@
+# ------------------------------------------------------------------------------
+# SentraAura — Local Development Stack
+# Full infrastructure parity for local development and integration testing.
+# ------------------------------------------------------------------------------
+
+version: "3.9"
+
+services:
+  # PostgreSQL — Primary database
+  postgres:
+    image: postgres:16-alpine
+    container_name: sentra-postgres
+    environment:
+      POSTGRES_USER: sentra_admin
+      POSTGRES_PASSWORD: sentra_local_dev
+      POSTGRES_DB: sentra
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentra_admin -d sentra"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sentra-local
+
+  # Redis — Cache and session store
+  redis:
+    image: redis:7-alpine
+    container_name: sentra-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sentra-local
+
+  # NATS — Event bus
+  nats:
+    image: nats:2.10-alpine
+    container_name: sentra-nats
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+      - "8080:8080"
+    volumes:
+      - nats_data:/data/jetstream
+    command: >
+      --jetstream
+      --store_dir /data/jetstream
+      --http_port 8222
+      --websocket_port 8080
+      --websocket_no_tls
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sentra-local
+
+  # Temporal — Workflow engine
+  temporal:
+    image: temporalio/auto-setup:1.22
+    container_name: sentra-temporal
+    environment:
+      DB: postgresql
+      DB_PORT: 5432
+      POSTGRES_USER: sentra_admin
+      POSTGRES_PWD: sentra_local_dev
+      POSTGRES_SEEDS: postgres
+      DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development-sql.yaml
+    ports:
+      - "7233:7233"
+      - "8233:8233"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - sentra-local
+
+  # Temporal Web UI
+  temporal-ui:
+    image: temporalio/ui:2.21
+    container_name: sentra-temporal-ui
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: http://localhost:3000
+    ports:
+      - "8233:8080"
+    depends_on:
+      - temporal
+    networks:
+      - sentra-local
+
+  # MinIO — S3-compatible object storage
+  minio:
+    image: minio/minio:latest
+    container_name: sentra-minio
+    environment:
+      MINIO_ROOT_USER: sentra
+      MINIO_ROOT_PASSWORD: sentra-local-dev-123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - sentra-local
+
+  # Create MinIO buckets on startup
+  minio-init:
+    image: minio/mc:latest
+    container_name: sentra-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      mc alias set local http://minio:9000 sentra sentra-local-dev-123;
+      mc mb local/sentra-local-media || true;
+      mc mb local/sentra-local-archival || true;
+      mc mb local/sentra-local-temp || true;
+      mc policy set public local/sentra-local-media;
+      echo 'MinIO buckets created';
+      "
+    networks:
+      - sentra-local
+
+  # Prometheus — Metrics
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: sentra-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=7d'
+      - '--web.enable-lifecycle'
+    networks:
+      - sentra-local
+
+  # Grafana — Dashboards
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: sentra-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    depends_on:
+      - prometheus
+    networks:
+      - sentra-local
+
+  # Loki — Log aggregation
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: sentra-loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - sentra-local
+
+  # Promtail — Log shipping
+  promtail:
+    image: grafana/promtail:2.9.0
+    container_name: sentra-promtail
+    volumes:
+      - /var/log:/var/log:ro
+      - ./promtail/promtail-config.yml:/etc/promtail/config.yml:ro
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - sentra-local
+
+  # Mailhog — Email capture for local testing
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: sentra-mailhog
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - sentra-local
+
+  # LocalStack — AWS services emulation
+  localstack:
+    image: localstack/localstack:3.0
+    container_name: sentra-localstack
+    environment:
+      SERVICES: s3,secretsmanager,kms,iam
+      DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    ports:
+      - "4566:4566"
+    volumes:
+      - localstack_data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - sentra-local
+
+  # Neo4j — Content Asset Graph (optional)
+  neo4j:
+    image: neo4j:5.15-community
+    container_name: sentra-neo4j
+    environment:
+      NEO4J_AUTH: neo4j/sentra-local-dev
+      NEO4J_PLUGINS: '["apoc", "gds"]'
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    volumes:
+      - neo4j_data:/data
+    networks:
+      - sentra-local
+
+volumes:
+  postgres_data:
+  redis_data:
+  nats_data:
+  minio_data:
+  prometheus_data:
+  grafana_data:
+  loki_data:
+  localstack_data:
+  neo4j_data:
+
+networks:
+  sentra-local:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

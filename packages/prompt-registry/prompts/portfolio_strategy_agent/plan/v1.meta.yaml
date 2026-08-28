@@ -1,0 +1,38 @@
+description: Portfolio-level resource allocation and cross-channel planning prompt
+author: SentraAura Engineering
+version: v1
+created_at: "2026-08-16"
+updated_at: "2026-08-16"
+tags: [portfolio, strategy, planning, allocation]
+variables:
+  - name: portfolio_name
+    type: string
+    required: true
+  - name: channel_count
+    type: number
+    required: false
+  - name: total_budget
+    type: number
+    required: false
+  - name: reporting_period
+    type: string
+    required: false
+  - name: channel_performance
+    type: string
+    required: false
+  - name: cross_channel_trends
+    type: string
+    required: false
+  - name: budget_utilization
+    type: string
+    required: false
+  - name: min_diversity_score
+    type: number
+    required: false
+  - name: max_budget_share
+    type: number
+    required: false
+  - name: compliance_requirements
+    type: string
+    required: false
+output_format: json

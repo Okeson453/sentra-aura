@@ -1,0 +1,14 @@
+{
+  "alert_id": "alert-sample-001",
+  "severity": "error",
+  "title": "Sample Error Alert",
+  "message": "This is a sample error alert for testing purposes.",
+  "source_service": "test-service",
+  "channel_id": "ch-test-001",
+  "metadata": {
+    "error_code": "E500",
+    "retry_count": 3,
+    "endpoint": "/api/v1/test"
+  },
+  "timestamp": 1705310400
+}

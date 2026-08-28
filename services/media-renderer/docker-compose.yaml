@@ -1,0 +1,29 @@
+version: "3.8"
+
+services:
+  media_renderer:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sentra-aura-media-renderer
+    ports:
+      - "8080:8080"
+    environment:
+      - MEDIA_RENDERER_LOG_LEVEL=INFO
+      - MEDIA_RENDERER_PORT=8080
+      - MEDIA_RENDERER_DATABASE_URL=sqlite:///./media_renderer.db
+      - MEDIA_RENDERER_REDIS_URL=redis://redis:6379/0
+    volumes:
+      - ./media_renderer.db:/app/media_renderer.db
+    networks:
+      - sentra-aura
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  sentra-aura:
+    external: true

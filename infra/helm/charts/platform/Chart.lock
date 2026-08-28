@@ -1,0 +1,12 @@
+dependencies:
+- name: nats-platform
+  repository: file://nats
+  version: 1.0.1
+- name: cert-manager-platform
+  repository: file://cert-manager
+  version: 1.0.1
+- name: default-deny
+  repository: file://default-deny
+  version: 1.0.0
+digest: sha256:154fd47c4154beb7fc2cbfc8407096890e5f8143e729563f0a3311458c8a9419
+generated: "2026-08-26T21:40:16.630422392Z"

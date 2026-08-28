@@ -1,0 +1,50 @@
+{
+  "research_request": {
+    "query": "latest breakthroughs in solid-state battery technology 2026",
+    "channel_id": "ch-tech-insights",
+    "depth": "deep",
+    "max_sources": 15,
+    "topic_domains": ["technology", "energy", "materials-science"]
+  },
+  "fact_check_request": {
+    "claim_text": "Solid-state batteries will replace lithium-ion batteries by 2028",
+    "context": "A recent article claimed solid-state batteries will completely replace lithium-ion by 2028",
+    "channel_id": "ch-tech-insights"
+  },
+  "claim_extraction_request": {
+    "text": "According to MIT researchers, solid-state batteries have achieved 500 Wh/kg energy density. Toyota plans to mass-produce them by 2027. However, some experts suggest this timeline may be optimistic.",
+    "min_confidence": 0.6
+  },
+  "sample_sources": [
+    {
+      "source_id": "src-nature-001",
+      "url": "https://nature.com/articles/s41586-026-00001-x",
+      "title": "Breakthrough in solid-state electrolyte stability",
+      "author": "Dr. Jane Chen",
+      "published_at": "2026-06-15",
+      "credibility_score": 0.95,
+      "domain_authority": 0.95,
+      "source_type": "academic"
+    },
+    {
+      "source_id": "src-reuters-002",
+      "url": "https://reuters.com/business/autos-transportation/toyota-solid-state-battery-2027-2026-03-10",
+      "title": "Toyota accelerates solid-state battery production timeline",
+      "author": "Reuters Staff",
+      "published_at": "2026-03-10",
+      "credibility_score": 0.85,
+      "domain_authority": 0.85,
+      "source_type": "news"
+    },
+    {
+      "source_id": "src-blog-003",
+      "url": "https://techblog.example.com/solid-state-hype",
+      "title": "Why solid-state batteries are overhyped",
+      "author": "Tech Blogger",
+      "published_at": "2026-01-20",
+      "credibility_score": 0.40,
+      "domain_authority": 0.40,
+      "source_type": "blog"
+    }
+  ]
+}

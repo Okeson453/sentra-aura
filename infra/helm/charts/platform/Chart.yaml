@@ -1,0 +1,16 @@
+apiVersion: v2
+name: sentra-platform
+description: SentraAura platform umbrella (nats, cert-manager, default-deny)
+type: application
+version: 1.0.0
+appVersion: "1.0"
+dependencies:
+  - name: nats-platform
+    version: "1.0.1"
+    repository: "file://nats"
+  - name: cert-manager-platform
+    version: "1.0.1"
+    repository: "file://cert-manager"
+  - name: default-deny
+    version: "1.0.0"
+    repository: "file://default-deny"

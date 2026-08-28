@@ -1,0 +1,4 @@
+nats-platform:
+  replicas: 1
+cert-manager-platform: {}
+default-deny: {}

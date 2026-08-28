@@ -1,0 +1,403 @@
+openapi: 3.1.0
+info:
+  title: Clipping Engine
+  version: 1.0.0
+  description: Automatic clip detection, segmentation, transcript-based slicing, highlight scoring
+servers:
+  - url: /api/v1
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /ready:
+    get:
+      operationId: readinessCheck
+      summary: Readiness check
+      responses:
+        "200":
+          description: Ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /clips/detect:
+    post:
+      operationId: detectClips
+      summary: Detect clip candidates from a long-form video
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClipDetectRequest"
+      responses:
+        "202":
+          description: Detection job started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClipJob"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /clips/jobs/{job_id}:
+    get:
+      operationId: getClipJobStatus
+      summary: Get clip detection job status
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Job status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClipJob"
+  /clips/jobs/{job_id}/results:
+    get:
+      operationId: getClipJobResults
+      summary: Get clip detection results
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Clip candidates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClipCandidate"
+  /clips/{clip_id}:
+    get:
+      operationId: getClip
+      summary: Get clip by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: clip_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Clip details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Clip"
+    delete:
+      operationId: deleteClip
+      summary: Delete a clip
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: clip_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Clip deleted
+  /clips/{clip_id}/render:
+    post:
+      operationId: renderClip
+      summary: Render a clip to final output
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: clip_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RenderRequest"
+      responses:
+        "202":
+          description: Render job started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RenderJob"
+  /clips/{clip_id}/score:
+    post:
+      operationId: scoreClip
+      summary: Score a clip for virality/engagement potential
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: clip_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Clip score
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClipScore"
+  /segments:
+    post:
+      operationId: createSegment
+      summary: Create a manual segment
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Segment"
+      responses:
+        "201":
+          description: Segment created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Segment"
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, timestamp]
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy, degraded]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+        checks:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status:
+                type: string
+                enum: [pass, fail, warn]
+              latency_ms:
+                type: number
+    ErrorResponse:
+      type: object
+      required: [error_code, message, trace_id]
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        trace_id:
+          type: string
+        details:
+          type: object
+    ClipDetectRequest:
+      type: object
+      required: [video_id, channel_id]
+      properties:
+        video_id:
+          type: string
+        channel_id:
+          type: string
+        min_duration_seconds:
+          type: integer
+          default: 15
+        max_duration_seconds:
+          type: integer
+          default: 60
+        target_platforms:
+          type: array
+          items:
+            type: string
+            enum: [youtube_shorts, tiktok, instagram_reels, twitter]
+        detection_strategy:
+          type: string
+          enum: [transcript_based, visual_saliency, audio_peaks, hybrid]
+          default: hybrid
+    ClipJob:
+      type: object
+      required: [job_id, status, video_id]
+      properties:
+        job_id:
+          type: string
+        status:
+          type: string
+          enum: [queued, running, completed, failed]
+        video_id:
+          type: string
+        progress_percent:
+          type: integer
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        error:
+          type: string
+    ClipCandidate:
+      type: object
+      required: [candidate_id, video_id, start_time, end_time, score]
+      properties:
+        candidate_id:
+          type: string
+        video_id:
+          type: string
+        start_time:
+          type: number
+        end_time:
+          type: number
+        duration_seconds:
+          type: number
+        score:
+          type: number
+        transcript_snippet:
+          type: string
+        detected_signals:
+          type: array
+          items:
+            type: string
+    Clip:
+      type: object
+      required: [clip_id, video_id, start_time, end_time, status]
+      properties:
+        clip_id:
+          type: string
+        video_id:
+          type: string
+        start_time:
+          type: number
+        end_time:
+          type: number
+        duration_seconds:
+          type: number
+        status:
+          type: string
+          enum: [draft, rendering, rendered, published, archived]
+        render_url:
+          type: string
+        thumbnail_url:
+          type: string
+        captions:
+          type: array
+          items:
+            type: object
+        channel_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    RenderRequest:
+      type: object
+      properties:
+        resolution:
+          type: string
+          enum: [1080p, 720p, 480p]
+          default: 1080p
+        format:
+          type: string
+          enum: [mp4, mov, webm]
+          default: mp4
+        include_captions:
+          type: boolean
+          default: true
+        include_watermark:
+          type: boolean
+          default: false
+    RenderJob:
+      type: object
+      required: [job_id, status]
+      properties:
+        job_id:
+          type: string
+        status:
+          type: string
+          enum: [queued, rendering, completed, failed]
+        progress_percent:
+          type: integer
+        output_url:
+          type: string
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+    ClipScore:
+      type: object
+      required: [clip_id, overall_score]
+      properties:
+        clip_id:
+          type: string
+        overall_score:
+          type: number
+        virality_score:
+          type: number
+        engagement_score:
+          type: number
+        retention_score:
+          type: number
+        hook_quality:
+          type: number
+        explanation:
+          type: string
+    Segment:
+      type: object
+      required: [segment_id, video_id, start_time, end_time]
+      properties:
+        segment_id:
+          type: string
+        video_id:
+          type: string
+        start_time:
+          type: number
+        end_time:
+          type: number
+        label:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key

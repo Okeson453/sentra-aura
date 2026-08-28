@@ -1,0 +1,397 @@
+openapi: 3.1.0
+info:
+  title: Policy Engine
+  version: 1.0.0
+  description: Autonomy levels L0-L4, risk scoring, learned-policy versioning
+servers:
+  - url: /api/v1
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /ready:
+    get:
+      operationId: readinessCheck
+      summary: Readiness check
+      responses:
+        "200":
+          description: Ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /autonomy/{channel_id}:
+    get:
+      operationId: getAutonomyLevel
+      summary: Get channel autonomy level
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: channel_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Autonomy level
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutonomyLevel"
+    put:
+      operationId: setAutonomyLevel
+      summary: Set channel autonomy level
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: channel_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutonomyLevel"
+      responses:
+        "200":
+          description: Autonomy updated
+        "400":
+          description: Invalid autonomy configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /risk-score:
+    post:
+      operationId: calculateRiskScore
+      summary: Calculate composite risk score for content
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RiskScoreRequest"
+      responses:
+        "200":
+          description: Risk score result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RiskScoreResult"
+  /risk-score/batch:
+    post:
+      operationId: batchRiskScore
+      summary: Batch calculate risk scores
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                items:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/RiskScoreRequest"
+      responses:
+        "200":
+          description: Batch results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RiskScoreResult"
+  /policies:
+    get:
+      operationId: listPolicies
+      summary: List learned policies
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: channel_id
+          in: query
+          schema:
+            type: string
+        - name: policy_type
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Policy list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PolicySnapshot"
+    post:
+      operationId: createPolicy
+      summary: Create a new policy snapshot
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PolicySnapshot"
+      responses:
+        "201":
+          description: Policy created
+  /policies/{policy_id}:
+    get:
+      operationId: getPolicy
+      summary: Get policy by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: policy_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Policy details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PolicySnapshot"
+    put:
+      operationId: updatePolicy
+      summary: Update policy weights
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: policy_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                weights:
+                  type: object
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: Policy updated
+  /policies/{policy_id}/rollback:
+    post:
+      operationId: rollbackPolicy
+      summary: Rollback policy to previous version
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: policy_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                target_version:
+                  type: string
+      responses:
+        "200":
+          description: Policy rolled back
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, timestamp]
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy, degraded]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+        checks:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status:
+                type: string
+                enum: [pass, fail, warn]
+              latency_ms:
+                type: number
+    ErrorResponse:
+      type: object
+      required: [error_code, message, trace_id]
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        trace_id:
+          type: string
+        details:
+          type: object
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+    AutonomyLevel:
+      type: object
+      required: [channel_id, level, rules]
+      properties:
+        channel_id:
+          type: string
+        level:
+          type: string
+          enum: [L0, L1, L2, L3, L4]
+        rules:
+          type: object
+          properties:
+            auto_publish_risk_threshold:
+              type: number
+              minimum: 0
+              maximum: 1
+            human_approval_risk_threshold:
+              type: number
+              minimum: 0
+              maximum: 1
+            blocked_risk_threshold:
+              type: number
+              minimum: 0
+              maximum: 1
+            max_daily_spend_usd:
+              type: number
+            max_concurrent_workflows:
+              type: integer
+            allowed_agent_types:
+              type: array
+              items:
+                type: string
+    RiskScoreRequest:
+      type: object
+      required: [content_id, content_type, claims, brand_deviation, copyright_risk, policy_risk]
+      properties:
+        content_id:
+          type: string
+        content_type:
+          type: string
+          enum: [script, video, thumbnail, clip, publication]
+        claims:
+          type: array
+          items:
+            type: object
+            properties:
+              claim_text:
+                type: string
+              source_url:
+                type: string
+              confidence:
+                type: number
+        brand_deviation:
+          type: number
+          minimum: 0
+          maximum: 1
+        copyright_risk:
+          type: number
+          minimum: 0
+          maximum: 1
+        policy_risk:
+          type: number
+          minimum: 0
+          maximum: 1
+        channel_id:
+          type: string
+    RiskScoreResult:
+      type: object
+      required: [risk_score, components, recommendation]
+      properties:
+        risk_score:
+          type: number
+          minimum: 0
+          maximum: 1
+        components:
+          type: object
+          properties:
+            factual_uncertainty:
+              type: number
+            copyright_risk:
+              type: number
+            brand_deviation:
+              type: number
+            policy_risk:
+              type: number
+            safety_risk:
+              type: number
+        recommendation:
+          type: string
+          enum: [auto_publish, human_approval, block]
+        explanation:
+          type: string
+    PolicySnapshot:
+      type: object
+      required: [policy_id, version, channel_id, policy_type, weights, created_at]
+      properties:
+        policy_id:
+          type: string
+        version:
+          type: string
+        channel_id:
+          type: string
+        policy_type:
+          type: string
+          enum: [content_selection, scheduling, packaging, risk_threshold, cost_optimization]
+        weights:
+          type: object
+        previous_version:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        created_by:
+          type: string
+        evaluation_score:
+          type: number
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key

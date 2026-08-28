@@ -1,0 +1,86 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ClipCandidateCreated",
+  "type": "object",
+  "required": [
+    "event_id",
+    "event_type",
+    "timestamp",
+    "channel_id",
+    "source_video_id",
+    "clip_candidates"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "clip.candidate.created"
+      ]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "channel_id": {
+      "type": "string"
+    },
+    "source_video_id": {
+      "type": "string"
+    },
+    "clip_candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "candidate_id",
+          "start_ms",
+          "end_ms",
+          "clip_type",
+          "clip_score"
+        ],
+        "properties": {
+          "candidate_id": {
+            "type": "string"
+          },
+          "start_ms": {
+            "type": "integer"
+          },
+          "end_ms": {
+            "type": "integer"
+          },
+          "clip_type": {
+            "type": "string",
+            "enum": [
+              "HOOK",
+              "QUOTE",
+              "HIGHLIGHT",
+              "EDUCATIONAL",
+              "STORY",
+              "SERIES",
+              "COMPILATION"
+            ]
+          },
+          "clip_score": {
+            "type": "number"
+          },
+          "context_score": {
+            "type": "number"
+          },
+          "hook_score": {
+            "type": "number"
+          },
+          "retention_prediction": {
+            "type": "number"
+          },
+          "compliance_risk": {
+            "type": "number"
+          }
+        }
+      }
+    }
+  }
+}

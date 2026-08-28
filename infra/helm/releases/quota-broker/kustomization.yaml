@@ -1,0 +1,24 @@
+# ------------------------------------------------------------------------------
+# SentraAura — Kustomization: quota-broker
+# References the HelmRelease and applies environment-specific patches.
+# ------------------------------------------------------------------------------
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: sentra
+
+resources:
+  - release.yaml
+
+patchesStrategicMerge:
+  - patches/resource-patch.yaml
+  - patches/replica-patch.yaml
+
+commonLabels:
+  app.kubernetes.io/name: quota-broker
+  app.kubernetes.io/part-of: sentra-aura
+  sentra.io/environment: "${ENVIRONMENT}"
+
+images:
+  - name: ghcr.io/sentra-aura/quota-broker
+    newTag: "${IMAGE_TAG}"

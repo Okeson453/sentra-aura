@@ -1,0 +1,310 @@
+openapi: 3.1.0
+info:
+  title: Rights Registry Service
+  version: 1.0.0
+  description: Copyright tracking, licensing management, usage rights, attribution chains
+servers:
+  - url: /api/v1
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /ready:
+    get:
+      operationId: readinessCheck
+      summary: Readiness check
+      responses:
+        "200":
+          description: Ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /rights:
+    post:
+      operationId: registerRights
+      summary: Register usage rights for an asset
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RightsRecord"
+      responses:
+        "201":
+          description: Rights registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RightsRecord"
+    get:
+      operationId: listRights
+      summary: List rights records
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: asset_id
+          in: query
+          schema:
+            type: string
+        - name: channel_id
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Rights list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RightsRecord"
+  /rights/{rights_id}:
+    get:
+      operationId: getRights
+      summary: Get rights by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: rights_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Rights details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RightsRecord"
+    put:
+      operationId: updateRights
+      summary: Update rights record
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: rights_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RightsRecord"
+      responses:
+        "200":
+          description: Rights updated
+  /rights/{rights_id}/check:
+    post:
+      operationId: checkUsageRights
+      summary: Check if a usage is permitted
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: rights_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [usage_type]
+              properties:
+                usage_type:
+                  type: string
+                  enum: [commercial, editorial, personal, derivative]
+                platform:
+                  type: string
+                territory:
+                  type: string
+      responses:
+        "200":
+          description: Usage check result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UsageCheckResult"
+  /licenses:
+    post:
+      operationId: createLicense
+      summary: Create a license
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/License"
+      responses:
+        "201":
+          description: License created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/License"
+  /licenses/{license_id}:
+    get:
+      operationId: getLicense
+      summary: Get license by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: license_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: License details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/License"
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, timestamp]
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy, degraded]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+        checks:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status:
+                type: string
+                enum: [pass, fail, warn]
+              latency_ms:
+                type: number
+    ErrorResponse:
+      type: object
+      required: [error_code, message, trace_id]
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        trace_id:
+          type: string
+        details:
+          type: object
+    RightsRecord:
+      type: object
+      required: [rights_id, asset_id, owner, license_type]
+      properties:
+        rights_id:
+          type: string
+        asset_id:
+          type: string
+        owner:
+          type: string
+        license_type:
+          type: string
+          enum: [proprietary, cc0, cc_by, cc_by_sa, cc_by_nc, royalty_free, custom]
+        permitted_usage:
+          type: array
+          items:
+            type: string
+        restricted_usage:
+          type: array
+          items:
+            type: string
+        attribution_required:
+          type: boolean
+        attribution_text:
+          type: string
+        valid_from:
+          type: string
+          format: date-time
+        valid_until:
+          type: string
+          format: date-time
+        territory_restrictions:
+          type: array
+          items:
+            type: string
+        channel_id:
+          type: string
+    UsageCheckResult:
+      type: object
+      required: [permitted]
+      properties:
+        permitted:
+          type: boolean
+        conditions:
+          type: array
+          items:
+            type: string
+        attribution_required:
+          type: boolean
+        attribution_text:
+          type: string
+        restrictions:
+          type: array
+          items:
+            type: string
+    License:
+      type: object
+      required: [license_id, rights_id, licensee, terms]
+      properties:
+        license_id:
+          type: string
+        rights_id:
+          type: string
+        licensee:
+          type: string
+        terms:
+          type: string
+        usage_type:
+          type: string
+        platform:
+          type: string
+        territory:
+          type: string
+        valid_from:
+          type: string
+          format: date-time
+        valid_until:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [active, expired, revoked, pending]
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key

@@ -1,0 +1,52 @@
+{
+  "llm_completion": {
+    "prompt": "Write a 30-second YouTube script about quantum computing.",
+    "model": "gpt-4o",
+    "temperature": 0.7,
+    "max_tokens": 512,
+    "channel_id": "ch-quantum-explained",
+    "task_type": "script_draft"
+  },
+  "embedding": {
+    "text": "Quantum computing uses qubits to perform calculations.",
+    "model": "text-embedding-3-small",
+    "dimensions": 1536,
+    "channel_id": "ch-quantum-explained",
+    "task_type": "embed"
+  },
+  "tts": {
+    "text": "Welcome to Quantum Explained. Today we dive into superposition.",
+    "voice": "21m00Tcm4TlvDq8ikWAM",
+    "speed": 1.0,
+    "channel_id": "ch-quantum-explained",
+    "task_type": "voiceover"
+  },
+  "image_generate": {
+    "prompt": "A futuristic quantum computer glowing with blue light in a clean lab",
+    "size": "1024x1024",
+    "style": "vivid",
+    "channel_id": "ch-quantum-explained",
+    "task_type": "thumbnail"
+  },
+  "video_generate": {
+    "prompt": "A smooth camera fly-through of a quantum processor chip",
+    "duration_seconds": 5,
+    "resolution": "1080p",
+    "channel_id": "ch-quantum-explained",
+    "task_type": "b_roll"
+  },
+  "search": {
+    "query": "latest quantum computing breakthroughs 2026",
+    "max_results": 10,
+    "search_depth": "advanced",
+    "channel_id": "ch-quantum-explained",
+    "task_type": "research"
+  },
+  "transcribe": {
+    "audio_url": "https://cdn.sentra-aura.dev/audio/sample-podcast.mp3",
+    "duration_seconds": 1800,
+    "language": "en",
+    "channel_id": "ch-quantum-explained",
+    "task_type": "transcribe"
+  }
+}

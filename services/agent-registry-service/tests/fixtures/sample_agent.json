@@ -1,0 +1,20 @@
+{
+  "agent_id": "agent-sample-001",
+  "name": "Sample Test Agent",
+  "agent_type": "script_writer",
+  "version": "1.0.0",
+  "description": "A sample agent for testing registration flows.",
+  "capabilities": ["scripting", "dialogue", "formatting"],
+  "config": {
+    "max_tokens": 4096,
+    "temperature": 0.7,
+    "model": "gpt-4"
+  },
+  "endpoints": [
+    {
+      "name": "generate",
+      "method": "POST",
+      "path": "/v1/generate"
+    }
+  ]
+}

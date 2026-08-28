@@ -1,0 +1,137 @@
+openapi: 3.0.3
+info:
+  title: Analytics Ingestion Service
+  version: 1.0.0
+  description: Ingests, normalizes, and writes YouTube Analytics data to the warehouse.
+
+servers:
+  - url: http://localhost:8000
+    description: Local development
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /ready:
+    get:
+      summary: Readiness check
+      operationId: readinessCheck
+      responses:
+        '200':
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/v1/ingest/youtube:
+    post:
+      summary: Ingest YouTube metrics
+      operationId: ingestYouTubeMetrics
+      parameters:
+        - name: channel_id
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: string
+      responses:
+        '200':
+          description: Metrics ingested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IngestResponse'
+        '502':
+          description: Upstream error
+
+  /api/v1/normalize:
+    post:
+      summary: Normalize raw metrics
+      operationId: normalizeMetrics
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NormalizeRequest'
+      responses:
+        '200':
+          description: Normalized metrics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NormalizedMetrics'
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        service:
+          type: string
+
+    IngestResponse:
+      type: object
+      properties:
+        ingested:
+          type: integer
+        channel_id:
+          type: string
+        video_ids:
+          type: array
+          items:
+            type: string
+
+    NormalizeRequest:
+      type: object
+      properties:
+        raw_metrics:
+          type: object
+        channel_baseline:
+          type: object
+        category_baseline:
+          type: object
+
+    NormalizedMetrics:
+      type: object
+      properties:
+        video_id:
+          type: string
+        channel_id:
+          type: string
+        views:
+          type: integer
+        normalized_ctr:
+          type: number
+        normalized_retention:
+          type: number
+        normalized_engagement:
+          type: number
+        normalized_watch_time:
+          type: number
+        composite_score:
+          type: number
+        confidence:
+          type: number
+        measured_at:
+          type: string
+          format: date-time

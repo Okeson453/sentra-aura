@@ -1,0 +1,19 @@
+{
+  "test_project_id": "proj_test_001",
+  "test_channel_id": "ch_test_001",
+  "sample_render_job": {
+    "job_id": "render_test_001",
+    "status": "completed",
+    "project_id": "proj_test_001",
+    "output_url": "https://cdn.example.com/renders/output.mp4",
+    "output_format": "mp4",
+    "resolution": "1080p"
+  },
+  "sample_transcode_job": {
+    "job_id": "transcode_test_001",
+    "status": "completed",
+    "source_asset_id": "asset_test_001",
+    "target_format": "mp4",
+    "output_url": "https://cdn.example.com/transcoded/output.mp4"
+  }
+}

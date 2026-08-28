@@ -1,0 +1,385 @@
+openapi: 3.1.0
+info:
+  title: Asset Store
+  version: 1.0.0
+  description: Signed-URL issuance, provenance lookups, object-storage lifecycle
+servers:
+  - url: /api/v1
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /ready:
+    get:
+      operationId: readinessCheck
+      summary: Readiness check
+      responses:
+        "200":
+          description: Ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /uploads:
+    post:
+      operationId: requestUpload
+      summary: Request presigned upload URL
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadRequest"
+      responses:
+        "200":
+          description: Presigned URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadResponse"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /uploads/{upload_id}/complete:
+    post:
+      operationId: completeUpload
+      summary: Mark upload as complete
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: upload_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                etag:
+                  type: string
+                checksum:
+                  type: string
+      responses:
+        "200":
+          description: Upload completed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Asset"
+  /assets/{asset_id}:
+    get:
+      operationId: getAsset
+      summary: Get asset metadata
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: asset_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Asset metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Asset"
+        "404":
+          description: Asset not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteAsset
+      summary: Delete an asset
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: asset_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Asset deleted
+  /assets/{asset_id}/download:
+    get:
+      operationId: requestDownload
+      summary: Request presigned download URL
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: asset_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: expiry_seconds
+          in: query
+          schema:
+            type: integer
+            default: 3600
+      responses:
+        "200":
+          description: Download URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  download_url:
+                    type: string
+                  expires_at:
+                    type: string
+                    format: date-time
+  /assets/{asset_id}/provenance:
+    get:
+      operationId: getProvenance
+      summary: Get asset provenance
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: asset_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Provenance record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProvenanceRecord"
+  /assets:
+    get:
+      operationId: listAssets
+      summary: List assets with filters
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: channel_id
+          in: query
+          schema:
+            type: string
+        - name: asset_type
+          in: query
+          schema:
+            type: string
+            enum: [video, audio, image, thumbnail, caption, metadata]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: Asset list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Asset"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+  /assets/{asset_id}/lifecycle:
+    put:
+      operationId: updateLifecycle
+      summary: Update asset lifecycle (archive, restore, delete)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: asset_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action:
+                  type: string
+                  enum: [archive, restore, delete]
+      responses:
+        "200":
+          description: Lifecycle updated
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, timestamp]
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy, degraded]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+        checks:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status:
+                type: string
+                enum: [pass, fail, warn]
+              latency_ms:
+                type: number
+    ErrorResponse:
+      type: object
+      required: [error_code, message, trace_id]
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        trace_id:
+          type: string
+        details:
+          type: object
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+    UploadRequest:
+      type: object
+      required: [filename, content_type, channel_id]
+      properties:
+        filename:
+          type: string
+        content_type:
+          type: string
+        channel_id:
+          type: string
+        asset_type:
+          type: string
+          enum: [video, audio, image, thumbnail, caption, metadata]
+        ttl_seconds:
+          type: integer
+        metadata:
+          type: object
+    UploadResponse:
+      type: object
+      required: [upload_url, asset_id, expires_at]
+      properties:
+        upload_url:
+          type: string
+        asset_id:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        form_data:
+          type: object
+    Asset:
+      type: object
+      required: [asset_id, filename, content_type, size_bytes, channel_id]
+      properties:
+        asset_id:
+          type: string
+        filename:
+          type: string
+        content_type:
+          type: string
+        size_bytes:
+          type: integer
+        channel_id:
+          type: string
+        asset_type:
+          type: string
+        storage_path:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        metadata:
+          type: object
+        lifecycle:
+          type: string
+          enum: [active, archived, deleted]
+    ProvenanceRecord:
+      type: object
+      required: [asset_id, source, created_by, created_at]
+      properties:
+        asset_id:
+          type: string
+        source:
+          type: object
+          properties:
+            type:
+              type: string
+            provider:
+              type: string
+            model:
+              type: string
+            generation_params:
+              type: object
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        license:
+          type: object
+          properties:
+            type:
+              type: string
+            terms:
+              type: string
+        lineage:
+          type: array
+          items:
+            type: string
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key

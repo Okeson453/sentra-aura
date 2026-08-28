@@ -1,0 +1,29 @@
+description: Scene breakdown and shot list planning prompt for the Scene & Shot Agent
+author: SentraAura Engineering
+version: v1
+created_at: "2026-08-16"
+updated_at: "2026-08-16"
+tags: [scene, shot, planning, production, storyboard]
+variables:
+  - name: video_title
+    type: string
+    required: false
+  - name: video_length
+    type: string
+    required: false
+  - name: production_style
+    type: string
+    required: false
+  - name: script_sections
+    type: array
+    required: true
+  - name: visual_references
+    type: string
+    required: false
+  - name: available_assets
+    type: string
+    required: false
+  - name: budget_constraints
+    type: string
+    required: false
+output_format: json

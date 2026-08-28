@@ -1,0 +1,129 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sentra
+  labels:
+    name: sentra
+    sentra.io/managed-by: helm
+    sentra.io/part-of: sentra-aura
+---
+# ------------------------------------------------------------------------------
+# SentraAura — Helm Release: agent-registry-service
+# Generated from generic sentra-service chart with service-specific overrides.
+# ------------------------------------------------------------------------------
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: agent-registry-service
+  namespace: sentra
+  labels:
+    app.kubernetes.io/name: agent-registry-service
+    app.kubernetes.io/part-of: sentra-aura
+    sentra.io/managed-by: flux
+spec:
+  interval: 5m
+  chart:
+    spec:
+      chart: sentra-service
+      version: "1.0.0"
+      sourceRef:
+        kind: HelmRepository
+        name: sentra-aura
+        namespace: flux-system
+  values:
+    serviceName: agent-registry-service
+    namespace: sentra
+
+    image:
+      repository: ghcr.io/sentra-aura
+      tag: "latest"
+
+    replicaCount: 2
+
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 100m
+        memory: 128Mi
+
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 70
+      targetMemoryUtilizationPercentage: 80
+
+    pdb:
+      enabled: true
+      minAvailable: 1
+
+    networkPolicy:
+      enabled: true
+      ingress:
+        - from:
+            - namespaceSelector:
+                matchLabels:
+                  name: ingress-nginx
+            - namespaceSelector:
+                matchLabels:
+                  name: observability
+            - namespaceSelector:
+                matchLabels:
+                  name: sentra
+      egress:
+        - to:
+            - namespaceSelector: {}
+          ports:
+            - protocol: TCP
+              port: 443
+            - protocol: TCP
+              port: 80
+            - protocol: TCP
+              port: 5432
+            - protocol: TCP
+              port: 6379
+            - protocol: TCP
+              port: 4222
+            - protocol: TCP
+              port: 7233
+
+    serviceAccount:
+      create: true
+      annotations:
+        eks.amazonaws.com/role-arn: "arn:aws:iam::ACCOUNT_ID:role/sentra-${ENVIRONMENT}-agent-registry-service-role"
+
+    env:
+      - name: SERVICE_NAME
+        value: "agent-registry-service"
+      - name: ENVIRONMENT
+        value: "${ENVIRONMENT}"
+      - name: LOG_LEVEL
+        value: "info"
+      - name: OTEL_EXPORTER_OTLP_ENDPOINT
+        value: "http://otel-collector.observability.svc.cluster.local:4317"
+      - name: OTEL_RESOURCE_ATTRIBUTES
+        value: "service.name=agent-registry-service,deployment.environment=${ENVIRONMENT}"
+      - name: NATS_URL
+        value: "nats://nats.nats.svc.cluster.local:4222"
+      - name: TEMPORAL_HOST
+        value: "temporal-frontend.temporal.svc.cluster.local:7233"
+      - name: DB_HOST
+        valueFrom:
+          secretKeyRef:
+            name: sentra-db-credentials
+            key: host
+      - name: DB_PORT
+        value: "5432"
+      - name: REDIS_HOST
+        valueFrom:
+          secretKeyRef:
+            name: sentra-redis-credentials
+            key: host
+      - name: REDIS_PORT
+        value: "6379"
+
+    extraLabels:
+      sentra.io/service: agent-registry-service
+      sentra.io/tier: backend

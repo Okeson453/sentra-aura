@@ -1,0 +1,24 @@
+# ------------------------------------------------------------------------------
+# SentraAura — Kustomization: content-graph-service
+# References the HelmRelease and applies environment-specific patches.
+# ------------------------------------------------------------------------------
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: sentra
+
+resources:
+  - release.yaml
+
+patchesStrategicMerge:
+  - patches/resource-patch.yaml
+  - patches/replica-patch.yaml
+
+commonLabels:
+  app.kubernetes.io/name: content-graph-service
+  app.kubernetes.io/part-of: sentra-aura
+  sentra.io/environment: "${ENVIRONMENT}"
+
+images:
+  - name: ghcr.io/sentra-aura/content-graph-service
+    newTag: "${IMAGE_TAG}"

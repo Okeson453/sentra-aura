@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "observability"
+version = "0.1.0"
+description = "Shared observability instrumentation for SentraAura"
+authors = ["SentraAura Engineering <engineering@sentraaura.com>"]
+packages = [{include = "observability", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "policy-engine"
+version = "0.1.0"
+description = "SentraAura Policy Engine — Autonomy levels and risk scoring"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.29.0",
+    "service-kit",
+    "sentinel-exceptions",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/policy_engine"]

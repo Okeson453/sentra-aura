@@ -1,0 +1,29 @@
+version: "3.8"
+
+services:
+  publishing_service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sentra-aura-publishing-service
+    ports:
+      - "8080:8080"
+    environment:
+      - PUBLISHING_SERVICE_LOG_LEVEL=INFO
+      - PUBLISHING_SERVICE_PORT=8080
+      - PUBLISHING_SERVICE_DATABASE_URL=sqlite:///./publishing_service.db
+      - PUBLISHING_SERVICE_REDIS_URL=redis://redis:6379/0
+    volumes:
+      - ./publishing_service.db:/app/publishing_service.db
+    networks:
+      - sentra-aura
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  sentra-aura:
+    external: true

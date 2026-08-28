@@ -1,0 +1,23 @@
+{
+  "test_rights_id": "rights_test_001",
+  "test_license_id": "license_test_001",
+  "sample_rights_record": {
+    "rights_id": "rights_test_001",
+    "asset_id": "asset_test_001",
+    "owner": "SentraAura Productions",
+    "license_type": "proprietary",
+    "permitted_usage": ["distribution", "monetization"],
+    "restricted_usage": ["sublicensing"],
+    "attribution_required": true,
+    "attribution_text": "Courtesy of SentraAura Productions",
+    "territory_restrictions": ["CN", "RU"]
+  },
+  "sample_license": {
+    "license_id": "license_test_001",
+    "rights_id": "rights_test_001",
+    "licensee": "Partner Network Inc",
+    "usage_type": "distribution",
+    "platform": "youtube",
+    "status": "active"
+  }
+}

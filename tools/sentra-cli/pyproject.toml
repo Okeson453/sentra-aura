@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "sentra-cli"
+version = "0.1.0"
+description = "SentraAura Developer CLI"
+authors = ["SentraAura Engineering <engineering@sentraaura.com>"]
+packages = [{include = "sentra_cli", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+typer = "^0.9"
+
+[tool.poetry.scripts]
+sentra = "sentra_cli.main:main"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

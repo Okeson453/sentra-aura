@@ -1,0 +1,85 @@
+# ------------------------------------------------------------------------------
+# SentraAura — Contract Test Pipeline
+# Standalone pipeline for contract validation across all interfaces.
+# ------------------------------------------------------------------------------
+
+stages:
+  - validate
+
+variables:
+  PYTHON_VERSION: "3.12"
+
+contract-validation:
+  stage: validate
+  image: python:${PYTHON_VERSION}
+  before_script:
+    - pip install jsonschema PyYAML openapi-spec-validator
+    - pip install -e ./packages/agent-contracts
+    - pip install -e ./packages/event-schemas
+  script:
+    # OpenAPI specs
+    - |
+      echo "=== Validating OpenAPI Specifications ==="
+      for spec in contracts/openapi/*.yaml; do
+        echo "Validating $spec"
+        python -m openapi_spec_validator "$spec"
+      done
+    # Event schemas
+    - |
+      echo "=== Validating Event Schemas ==="
+      python -c "
+      import json, jsonschema, os
+      schema_dir = 'contracts/events/v1'
+      for f in os.listdir(schema_dir):
+          if f.endswith('.json'):
+              with open(f'{schema_dir}/{f}') as fh:
+                  schema = json.load(fh)
+              jsonschema.Draft7Validator.check_schema(schema)
+              print(f'Valid: {f}')
+      print('All event schemas valid')
+      "
+    # Agent message envelope
+    - |
+      echo "=== Validating Agent Message Envelope ==="
+      python -c "
+      import json, jsonschema
+      with open('contracts/agent-messages/envelope.json') as f:
+          schema = json.load(f)
+      jsonschema.Draft7Validator.check_schema(schema)
+      print('AgentMessage envelope schema valid')
+      "
+    # GraphQL schema
+    - |
+      echo "=== Validating GraphQL Schema ==="
+      python -c "
+      import os
+      if os.path.exists('contracts/graphql/schema.graphql'):
+          with open('contracts/graphql/schema.graphql') as f:
+              content = f.read()
+          assert 'type Query' in content
+          assert 'type Mutation' in content
+          print('GraphQL schema valid')
+      else:
+          print('No GraphQL schema found')
+      "
+    # Cross-reference check
+    - |
+      echo "=== Checking Cross-References ==="
+      python -c "
+      import yaml, os
+      # Verify every service has a matching contract
+      services = [d for d in os.listdir('services') if os.path.isdir(f'services/{d}')]
+      for svc in services:
+          openapi_file = f'contracts/openapi/{svc}.yaml'
+          if not os.path.exists(openapi_file):
+              print(f'WARNING: No OpenAPI contract for {svc}')
+      print('Cross-reference check complete')
+      "
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - contracts/**/*
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - contracts/**/*
+    - if: $CI_PIPELINE_SOURCE == "schedule"

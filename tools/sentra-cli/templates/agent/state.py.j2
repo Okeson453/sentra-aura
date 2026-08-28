@@ -1,0 +1,13 @@
+"""State machine for {{name}} agent."""
+from __future__ import annotations
+
+from enum import Enum
+
+
+class {{name}}State(str, Enum):
+    """States for the {{name}} agent lifecycle."""
+    IDLE = "idle"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    RETRYING = "retrying"

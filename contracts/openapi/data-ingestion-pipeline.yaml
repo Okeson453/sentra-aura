@@ -1,0 +1,269 @@
+openapi: 3.1.0
+info:
+  title: Data Ingestion Pipeline
+  version: 1.0.0
+  description: External trend/social/news polling, normalized feed distribution
+servers:
+  - url: /api/v1
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /ready:
+    get:
+      operationId: readinessCheck
+      summary: Readiness check
+      responses:
+        "200":
+          description: Ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /feeds:
+    get:
+      operationId: listFeeds
+      summary: List configured data feeds
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Feed list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/DataFeed"
+    post:
+      operationId: createFeed
+      summary: Create a new data feed
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataFeedCreate"
+      responses:
+        "201":
+          description: Feed created
+  /feeds/{feed_id}:
+    get:
+      operationId: getFeed
+      summary: Get feed details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: feed_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Feed details
+    delete:
+      operationId: deleteFeed
+      summary: Delete a feed
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: feed_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Feed deleted
+  /feeds/{feed_id}/poll:
+    post:
+      operationId: pollFeed
+      summary: Trigger manual poll
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: feed_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "202":
+          description: Poll triggered
+  /feeds/{feed_id}/items:
+    get:
+      operationId: listFeedItems
+      summary: Get items from a feed
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: feed_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: since
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+      responses:
+        "200":
+          description: Feed items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FeedItem"
+  /normalize:
+    post:
+      operationId: normalizeData
+      summary: Normalize raw data to canonical format
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NormalizeRequest"
+      responses:
+        "200":
+          description: Normalized data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NormalizedItem"
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, timestamp]
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy, degraded]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+        checks:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status:
+                type: string
+                enum: [pass, fail, warn]
+              latency_ms:
+                type: number
+    ErrorResponse:
+      type: object
+      required: [error_code, message, trace_id]
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        trace_id:
+          type: string
+        details:
+          type: object
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+    DataFeed:
+      type: object
+      required: [feed_id, source_type, config]
+      properties:
+        feed_id:
+          type: string
+        source_type:
+          type: string
+          enum: [youtube_trends, google_trends, rss, twitter, reddit, competitor]
+        config:
+          type: object
+        schedule:
+          type: string
+        last_poll_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [active, paused, error]
+    DataFeedCreate:
+      type: object
+      required: [source_type, config]
+      properties:
+        source_type:
+          type: string
+        config:
+          type: object
+        schedule:
+          type: string
+    FeedItem:
+      type: object
+      required: [item_id, source, raw_data, normalized_data]
+      properties:
+        item_id:
+          type: string
+        source:
+          type: string
+        raw_data:
+          type: object
+        normalized_data:
+          type: object
+        fetched_at:
+          type: string
+          format: date-time
+    NormalizeRequest:
+      type: object
+      required: [raw_data, source_type]
+      properties:
+        raw_data:
+          type: object
+        source_type:
+          type: string
+    NormalizedItem:
+      type: object
+      required: [item_id, canonical_fields]
+      properties:
+        item_id:
+          type: string
+        canonical_fields:
+          type: object
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key

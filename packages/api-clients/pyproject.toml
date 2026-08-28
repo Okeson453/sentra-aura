@@ -1,0 +1,15 @@
+[project]
+name = "sentra-api-clients"
+version = "1.0.0"
+description = "Generated typed inter-service API clients for SentraAura"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27",
+    "pydantic>=2.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+]

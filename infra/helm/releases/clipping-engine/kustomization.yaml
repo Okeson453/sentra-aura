@@ -1,0 +1,24 @@
+# ------------------------------------------------------------------------------
+# SentraAura — Kustomization: clipping-engine
+# References the HelmRelease and applies environment-specific patches.
+# ------------------------------------------------------------------------------
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: clipping
+
+resources:
+  - release.yaml
+
+patchesStrategicMerge:
+  - patches/resource-patch.yaml
+  - patches/replica-patch.yaml
+
+commonLabels:
+  app.kubernetes.io/name: clipping-engine
+  app.kubernetes.io/part-of: sentra-aura
+  sentra.io/environment: "${ENVIRONMENT}"
+
+images:
+  - name: ghcr.io/sentra-aura/clipping-engine
+    newTag: "${IMAGE_TAG}"

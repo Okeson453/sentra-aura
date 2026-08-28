@@ -1,0 +1,11 @@
+# Default deny network policies applied to all namespaces
+namespaces:
+  - default
+  - sentra
+  - agent-runtime
+  - clipping
+  - media
+  - analytics
+
+denyIngress: true
+denyEgress: false

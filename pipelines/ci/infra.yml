@@ -1,0 +1,160 @@
+# ------------------------------------------------------------------------------
+# SentraAura — Infrastructure CI Pipeline
+# Implements Backend-Infrastructure-DevOps.md §7.4
+# Terraform plan/apply with approval gates, Helm lint, Kustomize check.
+# ------------------------------------------------------------------------------
+
+stages:
+  - validate
+  - plan
+  - apply
+  - helm-check
+
+variables:
+  TERRAFORM_VERSION: "1.9.0"
+  HELM_VERSION: "3.15.0"
+  AWS_REGION: "us-east-1"
+
+# Terraform Format & Validate
+terraform-validate:
+  stage: validate
+  image: hashicorp/terraform:${TERRAFORM_VERSION}
+  parallel:
+    matrix:
+      - ENVIRONMENT: [local, dev, staging, canary, production]
+  script:
+    - cd infra/terraform/environments/${ENVIRONMENT}
+    - terraform fmt -check -recursive
+    - terraform init -backend=false
+    - terraform validate
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - infra/terraform/**/*
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - infra/terraform/**/*
+
+# TFLint
+tflint:
+  stage: validate
+  image: ghcr.io/terraform-linters/tflint:v0.51.0
+  script:
+    - tflint --init
+    - tflint --recursive --format compact infra/terraform/
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - infra/terraform/**/*
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - infra/terraform/**/*
+
+# Terraform Plan
+terraform-plan:
+  stage: plan
+  image: hashicorp/terraform:${TERRAFORM_VERSION}
+  needs: [terraform-validate, tflint]
+  parallel:
+    matrix:
+      - ENVIRONMENT: [dev, staging, production]
+  before_script:
+    - apk add --no-cache aws-cli
+    - aws configure set region ${AWS_REGION}
+  script:
+    - cd infra/terraform/environments/${ENVIRONMENT}
+    - terraform init
+    - terraform plan -no-color -out=tfplan
+  artifacts:
+    paths:
+      - infra/terraform/environments/${ENVIRONMENT}/tfplan
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - infra/terraform/**/*
+
+# Terraform Apply (main branch only, dev auto-approved)
+terraform-apply:
+  stage: apply
+  image: hashicorp/terraform:${TERRAFORM_VERSION}
+  needs: [terraform-plan]
+  environment:
+    name: terraform/${ENVIRONMENT}
+  before_script:
+    - apk add --no-cache aws-cli
+    - aws configure set region ${AWS_REGION}
+  script:
+    - cd infra/terraform/environments/${ENVIRONMENT}
+    - terraform init
+    - |
+      if [ "${ENVIRONMENT}" == "dev" ]; then
+        terraform apply -auto-approve tfplan
+      else
+        terraform apply tfplan
+      fi
+  parallel:
+    matrix:
+      - ENVIRONMENT: [dev]
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - infra/terraform/**/*
+      when: manual
+
+# Helm Lint
+helm-lint:
+  stage: helm-check
+  image: alpine/helm:${HELM_VERSION}
+  script:
+    - helm lint infra/helm/charts/sentra-service
+    - |
+      for chart in infra/helm/charts/platform/*/; do
+        helm lint "$chart"
+      done
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - infra/helm/**/*
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - infra/helm/**/*
+
+# Helm Template Validation
+helm-template:
+  stage: helm-check
+  image: alpine/helm:${HELM_VERSION}
+  needs: [helm-lint]
+  script:
+    - |
+      helm template sentra-service infra/helm/charts/sentra-service \
+        --values infra/helm/environments/dev/values.yaml \
+        --set serviceName=test-service \
+        --set imageTag=test > /dev/null
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - infra/helm/**/*
+
+# Kustomize Check
+kustomize-check:
+  stage: helm-check
+  image: bitnami/kubectl:latest
+  before_script:
+    - |
+      curl -sL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.4.0/kustomize_v5.4.0_linux_amd64.tar.gz | tar xz
+      mv kustomize /usr/local/bin/
+  script:
+    - |
+      for release in infra/helm/releases/*/; do
+        if [ -f "${release}kustomization.yaml" ]; then
+          echo "Checking ${release}"
+          kustomize build "${release}" > /dev/null
+        fi
+      done
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - infra/helm/releases/**/*
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - infra/helm/releases/**/*

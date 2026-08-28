@@ -1,0 +1,167 @@
+openapi: 3.0.3
+info:
+  title: Billing Service
+  version: 1.0.0
+  description: SaaS-mode billing - metering, invoicing, and cost attribution.
+
+servers:
+  - url: http://localhost:8000
+    description: Local development
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/v1/meter:
+    post:
+      summary: Record usage
+      operationId: recordUsage
+      parameters:
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: channel_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: service_name
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: operation
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: units
+          in: query
+          required: true
+          schema:
+            type: number
+      responses:
+        '200':
+          description: Usage recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeterResponse'
+
+  /api/v1/meter/tenant/{tenant_id}:
+    get:
+      summary: Get tenant usage
+      operationId: getTenantUsage
+      parameters:
+        - name: tenant_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Tenant usage summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageSummary'
+
+  /api/v1/invoices:
+    post:
+      summary: Create invoice
+      operationId: createInvoice
+      parameters:
+        - name: tenant_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: days
+          in: query
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Invoice created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Invoice'
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        service:
+          type: string
+
+    MeterResponse:
+      type: object
+      properties:
+        recorded:
+          type: boolean
+        tenant_id:
+          type: string
+        operation:
+          type: string
+        units:
+          type: number
+        cost_usd:
+          type: number
+        timestamp:
+          type: string
+          format: date-time
+
+    UsageSummary:
+      type: object
+      properties:
+        tenant_id:
+          type: string
+        period_start:
+          type: string
+        period_end:
+          type: string
+        total_cost_usd:
+          type: number
+        operations:
+          type: object
+          additionalProperties:
+            type: object
+
+    Invoice:
+      type: object
+      properties:
+        invoice_id:
+          type: string
+        tenant_id:
+          type: string
+        total_usd:
+          type: number
+        status:
+          type: string
+        due_date:
+          type: string
+        line_items:
+          type: array
+          items:
+            type: object

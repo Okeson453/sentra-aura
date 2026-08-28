@@ -1,0 +1,53 @@
+{
+  "agent_id": "voice_agent",
+  "version": "v1",
+  "benchmarks": [
+    {
+      "name": "factual_accuracy",
+      "threshold": 0.9,
+      "weight": 0.2
+    },
+    {
+      "name": "brand_consistency",
+      "threshold": 0.85,
+      "weight": 0.15
+    },
+    {
+      "name": "metadata_quality",
+      "threshold": 0.8,
+      "weight": 0.1
+    },
+    {
+      "name": "script_structure",
+      "threshold": 0.85,
+      "weight": 0.1
+    },
+    {
+      "name": "visual_relevance",
+      "threshold": 0.8,
+      "weight": 0.1
+    },
+    {
+      "name": "audio_quality",
+      "threshold": 0.9,
+      "weight": 0.1
+    },
+    {
+      "name": "caption_sync",
+      "threshold": 0.95,
+      "weight": 0.1
+    },
+    {
+      "name": "hallucination_detection",
+      "threshold": 0.95,
+      "weight": 0.15
+    }
+  ],
+  "safety_checks": [
+    "harmful_content",
+    "misinformation",
+    "copyright_infringement",
+    "brand_safety",
+    "prompt_injection"
+  ]
+}

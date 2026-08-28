@@ -1,0 +1,12 @@
+"""Tests for {{name}} agent."""
+import pytest
+
+from {{name.lower()}}.agent import {{name}}Agent
+
+
+@pytest.mark.asyncio
+async def test_agent_execute():
+    agent = {{name}}Agent()
+    result = await agent.execute({"task_id": "test-001", "payload": {}})
+    assert result["status"] == "completed"
+    assert result["agent"] == "{{name}}"

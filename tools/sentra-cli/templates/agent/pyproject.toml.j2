@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "{{name}}-agent"
+version = "0.1.0"
+description = "{{name}} Agent for SentraAura"
+authors = ["SentraAura Engineering <engineering@sentraaura.com>"]
+packages = [{include = "{{name}}", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+service-kit = {path = "../../packages/service-kit", develop = true}
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+pytest-asyncio = "^0.23"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

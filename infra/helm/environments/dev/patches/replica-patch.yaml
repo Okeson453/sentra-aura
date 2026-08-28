@@ -1,0 +1,7 @@
+# Patch to adjust replicas for dev
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: placeholder
+spec:
+  replicas: 2

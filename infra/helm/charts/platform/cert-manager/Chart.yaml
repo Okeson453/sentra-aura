@@ -1,0 +1,7 @@
+apiVersion: v2
+name: cert-manager-platform
+description: cert-manager platform deployment for SentraAura (self-contained chart)
+type: application
+version: 1.0.1
+appVersion: "1.14"
+dependencies: []

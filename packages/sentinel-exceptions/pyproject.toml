@@ -1,0 +1,13 @@
+[tool.poetry]
+name = "sentinel-exceptions"
+version = "0.1.0"
+description = "Canonical exception types for SentraAura"
+authors = ["SentraAura Engineering <engineering@sentraaura.com>"]
+packages = [{include = "sentinel_exceptions", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

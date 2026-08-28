@@ -1,0 +1,21 @@
+{
+  "test_video_id": "vid_test_001",
+  "test_channel_id": "ch_test_001",
+  "sample_clip_candidate": {
+    "clip_id": "clip_test_001",
+    "start_time": 12.5,
+    "end_time": 42.5,
+    "duration": 30.0,
+    "virality_score": 0.85,
+    "engagement_score": 0.78,
+    "hook_quality": 0.92,
+    "transcript_segment": "This is the key moment that went viral."
+  },
+  "sample_detection_job": {
+    "job_id": "job_test_001",
+    "status": "completed",
+    "video_id": "vid_test_001",
+    "progress_percent": 100,
+    "candidates": []
+  }
+}

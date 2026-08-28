@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "VideoRendered",
+  "type": "object",
+  "required": [
+    "event_id",
+    "event_type",
+    "timestamp",
+    "channel_id",
+    "video_id",
+    "script_id"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "video.rendered"
+      ]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "channel_id": {
+      "type": "string"
+    },
+    "video_id": {
+      "type": "string"
+    },
+    "script_id": {
+      "type": "string"
+    },
+    "duration_seconds": {
+      "type": "integer"
+    },
+    "resolution": {
+      "type": "string"
+    },
+    "file_size_mb": {
+      "type": "number"
+    },
+    "render_time_seconds": {
+      "type": "integer"
+    },
+    "qc_status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "passed",
+        "failed"
+      ]
+    },
+    "asset_urls": {
+      "type": "object"
+    }
+  }
+}

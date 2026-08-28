@@ -1,0 +1,82 @@
+# ------------------------------------------------------------------------------
+# SentraAura — Rollback Pipeline
+# Emergency rollback procedure for production deployments.
+# ------------------------------------------------------------------------------
+
+stages:
+  - validate
+  - rollback
+  - verify
+
+variables:
+  KUBECTL_VERSION: "v1.29.0"
+  ROLLBACK_TIMEOUT: "300"
+
+# Validate rollback target
+validate-rollback:
+  stage: validate
+  image: bitnami/kubectl:latest
+  before_script:
+    - aws eks update-kubeconfig --region us-east-1 --name sentra-production
+  script:
+    - |
+      echo "Validating rollback target for ${SERVICE}..."
+      kubectl get deployment ${SERVICE} -n sentra -o yaml > /tmp/current-deployment.yaml
+      CURRENT_IMAGE=$(kubectl get deployment ${SERVICE} -n sentra -o jsonpath='{.spec.template.spec.containers[0].image}')
+      echo "Current image: ${CURRENT_IMAGE}"
+
+      # Get previous revision
+      PREVIOUS_REVISION=$(kubectl rollout history deployment/${SERVICE} -n sentra | tail -2 | head -1 | awk '{print $1}')
+      echo "Previous revision: ${PREVIOUS_REVISION}"
+
+      # Show what would change
+      kubectl rollout history deployment/${SERVICE} -n sentra --revision=${PREVIOUS_REVISION}
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "web" && $SERVICE
+
+# Execute rollback
+rollback:
+  stage: rollback
+  image: bitnami/kubectl:latest
+  needs: [validate-rollback]
+  before_script:
+    - aws eks update-kubeconfig --region us-east-1 --name sentra-production
+  script:
+    - |
+      echo "Rolling back ${SERVICE}..."
+      kubectl rollout undo deployment/${SERVICE} -n sentra
+
+      # Wait for rollback to complete
+      kubectl rollout status deployment/${SERVICE} -n sentra --timeout=${ROLLBACK_TIMEOUT}s
+
+      echo "Rollback complete"
+  environment:
+    name: production
+    action: stop
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "web" && $SERVICE
+
+# Verify rollback
+verify-rollback:
+  stage: verify
+  image: curlimages/curl:latest
+  needs: [rollback]
+  script:
+    - |
+      echo "Verifying rollback..."
+      # Check pod status
+      kubectl get pods -n sentra -l app.kubernetes.io/name=${SERVICE}
+
+      # Check health endpoint
+      kubectl port-forward svc/${SERVICE} 8080:8080 -n sentra &
+      sleep 5
+
+      HEALTH_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health/ready)
+      if [ "$HEALTH_STATUS" != "200" ]; then
+        echo "ERROR: Health check failed after rollback"
+        exit 1
+      fi
+
+      echo "Rollback verified successfully"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "web" && $SERVICE

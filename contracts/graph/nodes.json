@@ -1,0 +1,1229 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ContentAssetGraphNodes",
+  "description": "All node types in the Content Asset Graph",
+  "type": "object",
+  "oneOf": [
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "AudienceSegment",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "AudienceSegment"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "BrandPolicy",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "BrandPolicy"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Brief",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "Brief"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Channel",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "Channel"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Clip",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "Clip"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ClipCandidate",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "ClipCandidate"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "DecisionLog",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "DecisionLog"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Experiment",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "Experiment"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "FactClaim",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "FactClaim"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Idea",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "Idea"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Insight",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "Insight"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "LongFormVideo",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "LongFormVideo"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "PackageVariant",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "PackageVariant"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "PerformanceRecord",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "PerformanceRecord"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "PolicySnapshot",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "PolicySnapshot"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Publication",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "Publication"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ResearchSource",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "ResearchSource"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ResearchTopic",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "ResearchTopic"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Scene",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "Scene"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Script",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "Script"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ScriptScene",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "ScriptScene"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Segment",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "Segment"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "SEOMetadata",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "SEOMetadata"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Short",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "Short"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Shot",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "Shot"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Storyboard",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "Storyboard"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Thumbnail",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "Thumbnail"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "TimestampRange",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "TimestampRange"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "TitleVariant",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "TitleVariant"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Transcript",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "Transcript"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "TrendSignal",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "TrendSignal"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "VisualAsset",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "VisualAsset"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "VoiceAsset",
+      "type": "object",
+      "required": [
+        "id",
+        "node_type"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": [
+            "VoiceAsset"
+          ]
+        },
+        "channel_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "version": {
+          "type": "string"
+        }
+      }
+    }
+  ]
+}

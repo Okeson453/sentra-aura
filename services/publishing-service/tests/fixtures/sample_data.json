@@ -1,0 +1,20 @@
+{
+  "test_publication_id": "pub_test_001",
+  "test_channel_id": "ch_test_001",
+  "sample_publication": {
+    "publication_id": "pub_test_001",
+    "channel_id": "ch_test_001",
+    "title": "Test Publication",
+    "description": "A test publication for integration testing.",
+    "status": "draft",
+    "asset_id": "asset_test_001",
+    "platforms": ["youtube", "tiktok"],
+    "tags": ["test", "demo"]
+  },
+  "sample_platform_result": {
+    "platform": "youtube",
+    "status": "published",
+    "platform_content_id": "yt_abc123",
+    "url": "https://youtube.com/watch?v=abc123"
+  }
+}

@@ -1,0 +1,29 @@
+description: Voiceover synthesis and TTS preparation prompt for the Voice Agent
+author: SentraAura Engineering
+version: v1
+created_at: "2026-08-16"
+updated_at: "2026-08-16"
+tags: [voice, tts, synthesis, audio, narration]
+variables:
+  - name: channel_name
+    type: string
+    required: false
+  - name: video_title
+    type: string
+    required: false
+  - name: voice_profile
+    type: string
+    required: false
+  - name: language
+    type: string
+    required: false
+  - name: script_sections
+    type: array
+    required: true
+  - name: brand_voice_guidelines
+    type: string
+    required: false
+  - name: previous_voiceovers
+    type: string
+    required: false
+output_format: json

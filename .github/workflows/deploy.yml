@@ -1,0 +1,105 @@
+# ------------------------------------------------------------------------------
+# SentraAura — Deployment Workflow
+# Handles deployment to dev, staging, and production environments.
+# ------------------------------------------------------------------------------
+
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+          - production
+      service:
+        description: 'Service to deploy (blank for all)'
+        required: false
+        type: string
+      image_tag:
+        description: 'Image tag to deploy'
+        required: true
+        type: string
+
+concurrency:
+  group: deploy-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: Deploy to ${{ github.event.inputs.environment }}
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.inputs.environment }}
+      url: https://${{ github.event.inputs.environment }}.sentra-aura.io
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Setup kubectl
+        run: |
+          curl -sLO https://dl.k8s/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: '3.15.0'
+
+      - name: Configure EKS access
+        run: |
+          aws eks update-kubeconfig --region us-east-1 --name sentra-${{ github.event.inputs.environment }}
+
+      - name: Deploy services
+        run: |
+          ENV=${{ github.event.inputs.environment }}
+          TAG=${{ github.event.inputs.image_tag }}
+          SERVICE=${{ github.event.inputs.service }}
+
+          if [ -n "$SERVICE" ]; then
+            SERVICES="$SERVICE"
+          else
+            SERVICES=$(ls infra/helm/releases/)
+          fi
+
+          for svc in $SERVICES; do
+            echo "Deploying $svc to $ENV with tag $TAG"
+            helm upgrade --install $svc infra/helm/charts/sentra-service \
+              --namespace sentra \
+              --values infra/helm/environments/$ENV/values.yaml \
+              --set serviceName=$svc \
+              --set imageTag=$TAG \
+              --wait --timeout 10m
+          done
+
+      - name: Verify deployment
+        run: |
+          kubectl get pods --all-namespaces -l sentra.io/part-of=sentra-aura
+          kubectl get hpa --all-namespaces
+
+      - name: Notify Slack
+        if: always()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "Deployment to ${{ github.event.inputs.environment }} ${{ job.status == 'success' && 'succeeded' || 'failed' }}"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_DEPLOY_WEBHOOK }}

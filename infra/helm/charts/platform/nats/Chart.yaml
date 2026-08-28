@@ -1,0 +1,8 @@
+apiVersion: v2
+name: nats-platform
+description: NATS JetStream platform deployment for SentraAura (self-contained chart)
+type: application
+version: 1.0.1
+appVersion: "2.10"
+# External chart deps removed — templates are local so CI lint works offline.
+dependencies: []

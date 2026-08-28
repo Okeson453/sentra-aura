@@ -1,0 +1,176 @@
+# ------------------------------------------------------------------------------
+# SentraAura — Progressive Rollout Pipeline
+# Implements Backend-Infrastructure-DevOps.md §7.5
+# Canary → 10% → 50% → 100% with automatic rollback on SLO breach.
+# ------------------------------------------------------------------------------
+
+stages:
+  - deploy-canary
+  - validate-canary
+  - rollout-10
+  - validate-10
+  - rollout-50
+  - validate-50
+  - rollout-100
+  - validate-100
+
+variables:
+  KUBECTL_VERSION: "v1.29.0"
+  HELM_VERSION: "3.15.0"
+  SLO_ERROR_RATE: "0.01"
+  SLO_LATENCY_P99: "2000"
+
+# Deploy to canary environment
+deploy-canary:
+  stage: deploy-canary
+  image: bitnami/kubectl:latest
+  before_script:
+    - |
+      curl -sL https://get.helm.sh/helm-${HELM_VERSION}-linux-amd64.tar.gz | tar xz
+      mv linux-amd64/helm /usr/local/bin/
+    - aws eks update-kubeconfig --region us-east-1 --name sentra-canary
+  script:
+    - |
+      for release in infra/helm/releases/*/; do
+        svc=$(basename "$release")
+        echo "Deploying $svc to canary"
+        helm upgrade --install $svc infra/helm/charts/sentra-service \
+          --namespace sentra \
+          --values infra/helm/environments/canary/values.yaml \
+          --set serviceName=$svc \
+          --set imageTag=${CI_COMMIT_SHA} \
+          --wait --timeout 10m
+      done
+  environment:
+    name: canary
+  rules:
+    - if: $CI_COMMIT_BRANCH == "release/*"
+
+# Validate canary SLOs
+validate-canary:
+  stage: validate-canary
+  image: curlimages/curl:latest
+  needs: [deploy-canary]
+  script:
+    - |
+      echo "Checking canary SLOs..."
+      # Query Prometheus for error rate and latency
+      ERROR_RATE=$(curl -s "http://prometheus.observability.svc.cluster.local:9090/api/v1/query?query=rate(http_requests_total{status=~"5..",environment="canary"}[5m])" | jq -r '.data.result[0].value[1] // 0')
+      LATENCY_P99=$(curl -s "http://prometheus.observability.svc.cluster.local:9090/api/v1/query?query=histogram_quantile(0.99,rate(http_request_duration_seconds_bucket{environment="canary"}[5m]))" | jq -r '.data.result[0].value[1] // 0')
+
+      echo "Canary error rate: $ERROR_RATE"
+      echo "Canary P99 latency: $LATENCY_P99"
+
+      if (( $(echo "$ERROR_RATE > $SLO_ERROR_RATE" | bc -l) )); then
+        echo "ERROR: Canary error rate exceeds SLO"
+        exit 1
+      fi
+
+      if (( $(echo "$LATENCY_P99 > $SLO_LATENCY_P99" | bc -l) )); then
+        echo "ERROR: Canary latency exceeds SLO"
+        exit 1
+      fi
+
+      echo "Canary validation passed"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "release/*"
+
+# Rollout 10%
+rollout-10:
+  stage: rollout-10
+  image: bitnami/kubectl:latest
+  needs: [validate-canary]
+  before_script:
+    - aws eks update-kubeconfig --region us-east-1 --name sentra-production
+  script:
+    - |
+      for release in infra/helm/releases/*/; do
+        svc=$(basename "$release")
+        echo "Rolling out $svc to 10%"
+        kubectl patch deployment $svc -n sentra -p '{"spec":{"template":{"metadata":{"annotations":{"rollout.sentra.io/percentage":"10"}}}}}'
+      done
+  rules:
+    - if: $CI_COMMIT_BRANCH == "release/*"
+    - when: manual
+
+# Validate 10%
+validate-10:
+  stage: validate-10
+  image: curlimages/curl:latest
+  needs: [rollout-10]
+  script:
+    - |
+      ERROR_RATE=$(curl -s "http://prometheus.observability.svc.cluster.local:9090/api/v1/query?query=rate(http_requests_total{status=~"5..",environment="production"}[5m])" | jq -r '.data.result[0].value[1] // 0')
+      if (( $(echo "$ERROR_RATE > $SLO_ERROR_RATE" | bc -l) )); then
+        echo "ERROR: 10% rollout error rate exceeds SLO - initiating rollback"
+        exit 1
+      fi
+      echo "10% validation passed"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "release/*"
+
+# Rollout 50%
+rollout-50:
+  stage: rollout-50
+  image: bitnami/kubectl:latest
+  needs: [validate-10]
+  before_script:
+    - aws eks update-kubeconfig --region us-east-1 --name sentra-production
+  script:
+    - |
+      for release in infra/helm/releases/*/; do
+        svc=$(basename "$release")
+        kubectl patch deployment $svc -n sentra -p '{"spec":{"template":{"metadata":{"annotations":{"rollout.sentra.io/percentage":"50"}}}}}'
+      done
+  rules:
+    - if: $CI_COMMIT_BRANCH == "release/*"
+    - when: manual
+
+# Validate 50%
+validate-50:
+  stage: validate-50
+  image: curlimages/curl:latest
+  needs: [rollout-50]
+  script:
+    - |
+      ERROR_RATE=$(curl -s "http://prometheus.observability.svc.cluster.local:9090/api/v1/query?query=rate(http_requests_total{status=~"5..",environment="production"}[5m])" | jq -r '.data.result[0].value[1] // 0')
+      if (( $(echo "$ERROR_RATE > $SLO_ERROR_RATE" | bc -l) )); then
+        echo "ERROR: 50% rollout error rate exceeds SLO - initiating rollback"
+        exit 1
+      fi
+      echo "50% validation passed"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "release/*"
+
+# Rollout 100%
+rollout-100:
+  stage: rollout-100
+  image: bitnami/kubectl:latest
+  needs: [validate-50]
+  before_script:
+    - aws eks update-kubeconfig --region us-east-1 --name sentra-production
+  script:
+    - |
+      for release in infra/helm/releases/*/; do
+        svc=$(basename "$release")
+        kubectl patch deployment $svc -n sentra -p '{"spec":{"template":{"metadata":{"annotations":{"rollout.sentra.io/percentage":"100"}}}}}'
+      done
+  rules:
+    - if: $CI_COMMIT_BRANCH == "release/*"
+    - when: manual
+
+# Validate 100%
+validate-100:
+  stage: validate-100
+  image: curlimages/curl:latest
+  needs: [rollout-100]
+  script:
+    - |
+      ERROR_RATE=$(curl -s "http://prometheus.observability.svc.cluster.local:9090/api/v1/query?query=rate(http_requests_total{status=~"5..",environment="production"}[5m])" | jq -r '.data.result[0].value[1] // 0')
+      if (( $(echo "$ERROR_RATE > $SLO_ERROR_RATE" | bc -l) )); then
+        echo "ERROR: Full rollout error rate exceeds SLO"
+        exit 1
+      fi
+      echo "100% validation passed - rollout complete"
+  rules:
+    - if: $CI_COMMIT_BRANCH == "release/*"

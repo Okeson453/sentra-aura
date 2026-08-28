@@ -1,0 +1,16 @@
+# SentraAura CODEOWNERS
+# Maps every top-level directory to an owning team/individual.
+# Enforces branch-protection review by directory.
+
+*                       @sentraaura/platform-team
+
+/contracts/             @sentraaura/platform-team @sentraaura/architecture-reviewers
+/packages/              @sentraaura/platform-team
+/services/              @sentraaura/platform-team
+/infra/                 @sentraaura/infra-team
+/pipelines/             @sentraaura/infra-team @sentraaura/platform-team
+/local/                 @sentraaura/platform-team
+/tools/                 @sentraaura/platform-team
+/runbooks/              @sentraaura/infra-team @sentraaura/on-call
+/ADRs/                  @sentraaura/architecture-reviewers
+/docs/                  @sentraaura/platform-team

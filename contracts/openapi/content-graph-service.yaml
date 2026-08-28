@@ -1,0 +1,344 @@
+openapi: 3.1.0
+info:
+  title: Content Graph Service
+  version: 1.0.0
+  description: Content Asset Graph persistence, lineage queries, node/edge CRUD
+servers:
+  - url: /api/v1
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /ready:
+    get:
+      operationId: readinessCheck
+      summary: Readiness check
+      responses:
+        "200":
+          description: Ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /nodes:
+    post:
+      operationId: createNode
+      summary: Create a graph node
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GraphNode"
+      responses:
+        "201":
+          description: Node created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GraphNode"
+    get:
+      operationId: listNodes
+      summary: List nodes with filters
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: channel_id
+          in: query
+          schema:
+            type: string
+        - name: node_type
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: Node list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GraphNode"
+  /nodes/{node_id}:
+    get:
+      operationId: getNode
+      summary: Get node by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: node_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Node details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GraphNode"
+    put:
+      operationId: updateNode
+      summary: Update a node
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: node_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GraphNode"
+      responses:
+        "200":
+          description: Node updated
+    delete:
+      operationId: deleteNode
+      summary: Delete a node
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: node_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Node deleted
+  /edges:
+    post:
+      operationId: createEdge
+      summary: Create a graph edge
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GraphEdge"
+      responses:
+        "201":
+          description: Edge created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GraphEdge"
+    get:
+      operationId: listEdges
+      summary: List edges
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: source_id
+          in: query
+          schema:
+            type: string
+        - name: target_id
+          in: query
+          schema:
+            type: string
+        - name: edge_type
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Edge list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/GraphEdge"
+  /lineage/{asset_id}:
+    get:
+      operationId: getLineage
+      summary: Get asset lineage (upstream and downstream)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: asset_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: direction
+          in: query
+          schema:
+            type: string
+            enum: [upstream, downstream, both]
+            default: both
+        - name: max_depth
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        "200":
+          description: Lineage chain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LineageChain"
+  /lineage/{asset_id}/impact:
+    get:
+      operationId: getImpactAnalysis
+      summary: Analyze impact of changing an asset
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: asset_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Impact analysis
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  affected_assets:
+                    type: array
+                    items:
+                      type: string
+                  total_count:
+                    type: integer
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, timestamp]
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy, degraded]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+        checks:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status:
+                type: string
+                enum: [pass, fail, warn]
+              latency_ms:
+                type: number
+    ErrorResponse:
+      type: object
+      required: [error_code, message, trace_id]
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        trace_id:
+          type: string
+        details:
+          type: object
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+    GraphNode:
+      type: object
+      required: [node_id, node_type, properties]
+      properties:
+        node_id:
+          type: string
+        node_type:
+          type: string
+          enum: [Channel, BrandPolicy, ResearchTopic, TrendSignal, ResearchSource, FactClaim, Idea, Brief, Script, ScriptScene, Storyboard, Scene, Shot, VoiceAsset, VisualAsset, LongFormVideo, Transcript, TimestampRange, Segment, ClipCandidate, Clip, Short, PackageVariant, Thumbnail, TitleVariant, SEOMetadata, Publication, PerformanceRecord, Experiment, Insight, PolicySnapshot, AudienceSegment, DecisionLog]
+        properties:
+          type: object
+        channel_id:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        version:
+          type: string
+    GraphEdge:
+      type: object
+      required: [edge_id, source_id, target_id, edge_type]
+      properties:
+        edge_id:
+          type: string
+        source_id:
+          type: string
+        target_id:
+          type: string
+        edge_type:
+          type: string
+          enum: [GENERATED, USED_IN, CONTAINS, PRODUCES, REQUIRES, COMPOSES, RENDERED_TO, HAS_TIMESTAMP, DERIVED_FROM, PROCESSED_TO, GENERATES, PUBLISHED_AS, HAS, MEASURED_BY, AB_TESTED_WITH, APPLIED_TO, MADE, INFLUENCES, OPTIMIZED_BY]
+        properties:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+    LineageChain:
+      type: object
+      required: [asset_id, chain]
+      properties:
+        asset_id:
+          type: string
+        chain:
+          type: array
+          items:
+            type: object
+            properties:
+              node:
+                $ref: "#/components/schemas/GraphNode"
+              edge:
+                $ref: "#/components/schemas/GraphEdge"
+              depth:
+                type: integer
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key

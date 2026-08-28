@@ -1,0 +1,36 @@
+description: Visual asset generation prompt for thumbnails, B-roll, and channel art
+author: SentraAura Engineering
+version: v1
+created_at: "2026-08-16"
+updated_at: "2026-08-16"
+tags: [visual, image, thumbnail, b-roll, generation]
+variables:
+  - name: channel_name
+    type: string
+    required: false
+  - name: video_title
+    type: string
+    required: false
+  - name: asset_type
+    type: enum
+    required: true
+    allowed_values: [thumbnail, b_roll, channel_art, end_screen, watermark]
+  - name: style_guide
+    type: string
+    required: false
+  - name: video_concept
+    type: string
+    required: false
+  - name: target_audience
+    type: string
+    required: false
+  - name: brand_colors
+    type: array
+    required: false
+  - name: competitor_thumbnails
+    type: string
+    required: false
+  - name: performance_data
+    type: string
+    required: false
+output_format: json

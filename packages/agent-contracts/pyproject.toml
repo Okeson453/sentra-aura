@@ -1,0 +1,13 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "agent-contracts"
+version = "0.1.0"
+description = "AgentMessage envelope and per-agent I/O schemas for SentraAura"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/agent_contracts"]

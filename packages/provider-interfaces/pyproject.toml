@@ -1,0 +1,13 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "provider-interfaces"
+version = "0.1.0"
+description = "Provider-agnostic AI capability interfaces for SentraAura"
+requires-python = ">=3.11"
+dependencies = []
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/provider_interfaces"]

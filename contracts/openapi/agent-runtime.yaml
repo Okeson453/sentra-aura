@@ -1,0 +1,317 @@
+openapi: 3.1.0
+info:
+  title: Agent Runtime
+  version: 1.0.0
+  description: Agent invocation, execution policy enforcement, tool permission checks
+servers:
+  - url: /api/v1
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /ready:
+    get:
+      operationId: readinessCheck
+      summary: Readiness check
+      responses:
+        "200":
+          description: Ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /invoke:
+    post:
+      operationId: invokeAgent
+      summary: Invoke an agent
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentMessage"
+      responses:
+        "202":
+          description: Agent invocation accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentInvocationResponse"
+        "400":
+          description: Invalid message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "402":
+          description: Budget exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Tool permission denied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /invoke/{invocation_id}:
+    get:
+      operationId: getInvocationStatus
+      summary: Get invocation status
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: invocation_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Invocation status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentInvocationResponse"
+  /invoke/{invocation_id}/cancel:
+    post:
+      operationId: cancelInvocation
+      summary: Cancel an invocation
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: invocation_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Invocation cancelled
+  /agents:
+    get:
+      operationId: listAgents
+      summary: List available agents
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Agent list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentInfo"
+  /agents/{agent_type}/tools:
+    get:
+      operationId: listAgentTools
+      summary: List tools available to an agent
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: agent_type
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Tool list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    tool_name:
+                      type: string
+                    description:
+                      type: string
+                    required_permissions:
+                      type: array
+                      items:
+                        type: string
+  /agents/{agent_type}/permissions:
+    get:
+      operationId: getAgentPermissions
+      summary: Get agent permission manifest
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: agent_type
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Permission manifest
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  agent_type:
+                    type: string
+                  allowed_tools:
+                    type: array
+                    items:
+                      type: string
+                  max_cost_per_invocation:
+                    type: number
+                  requires_human_approval:
+                    type: boolean
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, timestamp]
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy, degraded]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+        checks:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status:
+                type: string
+                enum: [pass, fail, warn]
+              latency_ms:
+                type: number
+    ErrorResponse:
+      type: object
+      required: [error_code, message, trace_id]
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        trace_id:
+          type: string
+        details:
+          type: object
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+    AgentMessage:
+      type: object
+      required: [message_id, correlation_id, parent_workflow_id, agent_type, task_type, payload, trace_id, deadline, priority, budget]
+      properties:
+        message_id:
+          type: string
+          format: uuid
+        correlation_id:
+          type: string
+          format: uuid
+        parent_workflow_id:
+          type: string
+          format: uuid
+        agent_type:
+          type: string
+        task_type:
+          type: string
+        payload:
+          type: object
+        state:
+          type: object
+        trace_id:
+          type: string
+        deadline:
+          type: string
+          format: date-time
+        priority:
+          type: string
+          enum: [LOW, NORMAL, HIGH, CRITICAL]
+        budget:
+          $ref: "#/components/schemas/CostBudget"
+        retry_count:
+          type: integer
+          minimum: 0
+        created_at:
+          type: string
+          format: date-time
+    CostBudget:
+      type: object
+      required: [max_cost_usd, currency]
+      properties:
+        max_cost_usd:
+          type: number
+        currency:
+          type: string
+        spent_usd:
+          type: number
+    AgentInvocationResponse:
+      type: object
+      required: [invocation_id, status]
+      properties:
+        invocation_id:
+          type: string
+        status:
+          type: string
+          enum: [accepted, rejected, queued, running, completed, failed, cancelled]
+        estimated_duration_seconds:
+          type: integer
+        actual_duration_seconds:
+          type: integer
+        result:
+          type: object
+        error:
+          type: object
+        cost_accrued_usd:
+          type: number
+        message:
+          type: string
+    AgentInfo:
+      type: object
+      required: [agent_type, version, status]
+      properties:
+        agent_type:
+          type: string
+        version:
+          type: string
+        status:
+          type: string
+          enum: [active, deprecated, experimental]
+        description:
+          type: string
+        domains:
+          type: array
+          items:
+            type: string
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key

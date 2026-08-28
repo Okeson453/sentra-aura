@@ -1,0 +1,14 @@
+"""Configuration for {{name}} agent."""
+from __future__ import annotations
+
+from pydantic_settings import BaseSettings
+
+
+class {{name}}Config(BaseSettings):
+    """Configuration loaded from environment variables."""
+    agent_name: str = "{{name}}"
+    max_retries: int = 3
+    timeout_seconds: int = 300
+
+    class Config:
+        env_prefix = "{{name.upper()}}_"

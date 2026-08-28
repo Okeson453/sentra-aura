@@ -1,0 +1,21 @@
+version: "1.0.0"
+agent: cost_control_agent
+task: govern
+name: "Cost Control Agent — govern v1"
+description: >
+  Primary prompt template for the Cost Control Agent govern task.
+  Used in the SentraAura autonomous media pipeline.
+author: "SentraAura Platform Team"
+created_at: "2026-08-16"
+model: "gpt-4o"
+temperature: 0.3
+max_tokens: 4096
+stop_sequences: []
+tags:
+  - cost_control_agent
+  - govern
+  - batch-4
+variables:
+  - task_description
+  - context
+  - input_data

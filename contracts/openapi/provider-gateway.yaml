@@ -1,0 +1,432 @@
+openapi: 3.1.0
+info:
+  title: Provider Gateway
+  version: 1.0.0
+  description: AI provider abstraction, routing, cost tracking, fallback chains
+servers:
+  - url: /api/v1
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /ready:
+    get:
+      operationId: readinessCheck
+      summary: Readiness check
+      responses:
+        "200":
+          description: Ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /v1/complete:
+    post:
+      operationId: llmComplete
+      summary: LLM completion
+      security:
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LLMCompletionRequest"
+      responses:
+        "200":
+          description: Completion result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LLMCompletionResponse"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: All providers unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/embed:
+    post:
+      operationId: embedText
+      summary: Text embedding
+      security:
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmbeddingRequest"
+      responses:
+        "200":
+          description: Embedding result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmbeddingResponse"
+  /v1/tts:
+    post:
+      operationId: textToSpeech
+      summary: Text-to-speech
+      security:
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text:
+                  type: string
+                voice:
+                  type: string
+                speed:
+                  type: number
+      responses:
+        "200":
+          description: TTS result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  audio_url:
+                    type: string
+                  provider:
+                    type: string
+                  duration_seconds:
+                    type: number
+  /v1/images/generate:
+    post:
+      operationId: generateImage
+      summary: Image generation
+      security:
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prompt]
+              properties:
+                prompt:
+                  type: string
+                size:
+                  type: string
+                style:
+                  type: string
+      responses:
+        "200":
+          description: Generated image
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  image_url:
+                    type: string
+                  provider:
+                    type: string
+                  resolution:
+                    type: string
+  /v1/video/generate:
+    post:
+      operationId: generateVideo
+      summary: Video generation
+      security:
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prompt]
+              properties:
+                prompt:
+                  type: string
+                duration_seconds:
+                  type: integer
+                resolution:
+                  type: string
+      responses:
+        "200":
+          description: Generated video
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  video_url:
+                    type: string
+                  provider:
+                    type: string
+                  duration_seconds:
+                    type: integer
+  /providers:
+    get:
+      operationId: listProviders
+      summary: List available providers
+      security:
+        - apiKey: []
+      responses:
+        "200":
+          description: Provider list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProviderInfo"
+  /providers/health:
+    get:
+      operationId: getProviderHealth
+      summary: Get provider health status
+      security:
+        - apiKey: []
+      responses:
+        "200":
+          description: Provider health map
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: string
+                  enum: [healthy, degraded, unhealthy]
+  /providers/{provider_id}/models:
+    get:
+      operationId: listProviderModels
+      summary: List models for a provider
+      security:
+        - apiKey: []
+      parameters:
+        - name: provider_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Model list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    model_id:
+                      type: string
+                    name:
+                      type: string
+                    capabilities:
+                      type: array
+                      items:
+                        type: string
+  /cost/usage:
+    get:
+      operationId: getUsageReport
+      summary: Get cost usage report
+      security:
+        - apiKey: []
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: channel_id
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Usage report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_cost_usd:
+                    type: number
+                  by_provider:
+                    type: object
+                  by_model:
+                    type: object
+                  by_channel:
+                    type: object
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, timestamp]
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy, degraded]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+        checks:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status:
+                type: string
+                enum: [pass, fail, warn]
+              latency_ms:
+                type: number
+    ErrorResponse:
+      type: object
+      required: [error_code, message, trace_id]
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        trace_id:
+          type: string
+        details:
+          type: object
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+    LLMCompletionRequest:
+      type: object
+      required: [prompt, task_type]
+      properties:
+        prompt:
+          type: string
+        task_type:
+          type: string
+        model:
+          type: string
+        temperature:
+          type: number
+        max_tokens:
+          type: integer
+        min_quality:
+          type: number
+        max_cost:
+          type: number
+        channel_id:
+          type: string
+        fallback_allowed:
+          type: boolean
+          default: true
+    LLMCompletionResponse:
+      type: object
+      required: [text, provider, model, usage]
+      properties:
+        text:
+          type: string
+        provider:
+          type: string
+        model:
+          type: string
+        usage:
+          type: object
+          properties:
+            prompt_tokens:
+              type: integer
+            completion_tokens:
+              type: integer
+            total_tokens:
+              type: integer
+            estimated_cost_usd:
+              type: number
+        latency_ms:
+          type: number
+        fallback_used:
+          type: boolean
+    EmbeddingRequest:
+      type: object
+      required: [text]
+      properties:
+        text:
+          type: string
+        model:
+          type: string
+        dimensions:
+          type: integer
+    EmbeddingResponse:
+      type: object
+      required: [embedding, provider, model]
+      properties:
+        embedding:
+          type: array
+          items:
+            type: number
+        provider:
+          type: string
+        model:
+          type: string
+        usage:
+          type: object
+          properties:
+            prompt_tokens:
+              type: integer
+            estimated_cost_usd:
+              type: number
+    ProviderInfo:
+      type: object
+      required: [provider_id, name, status]
+      properties:
+        provider_id:
+          type: string
+        name:
+          type: string
+        status:
+          type: string
+          enum: [active, degraded, disabled]
+        models:
+          type: array
+          items:
+            type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key

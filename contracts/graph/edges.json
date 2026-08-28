@@ -1,0 +1,673 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ContentAssetGraphEdges",
+  "description": "All edge types in the Content Asset Graph",
+  "type": "object",
+  "oneOf": [
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "AB_TESTED_WITH",
+      "type": "object",
+      "required": [
+        "id",
+        "edge_type",
+        "source_id",
+        "target_id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "edge_type": {
+          "type": "string",
+          "enum": [
+            "AB_TESTED_WITH"
+          ]
+        },
+        "source_id": {
+          "type": "string"
+        },
+        "target_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "APPLIED_TO",
+      "type": "object",
+      "required": [
+        "id",
+        "edge_type",
+        "source_id",
+        "target_id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "edge_type": {
+          "type": "string",
+          "enum": [
+            "APPLIED_TO"
+          ]
+        },
+        "source_id": {
+          "type": "string"
+        },
+        "target_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "COMPOSES",
+      "type": "object",
+      "required": [
+        "id",
+        "edge_type",
+        "source_id",
+        "target_id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "edge_type": {
+          "type": "string",
+          "enum": [
+            "COMPOSES"
+          ]
+        },
+        "source_id": {
+          "type": "string"
+        },
+        "target_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "CONTAINS",
+      "type": "object",
+      "required": [
+        "id",
+        "edge_type",
+        "source_id",
+        "target_id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "edge_type": {
+          "type": "string",
+          "enum": [
+            "CONTAINS"
+          ]
+        },
+        "source_id": {
+          "type": "string"
+        },
+        "target_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "DERIVED_FROM",
+      "type": "object",
+      "required": [
+        "id",
+        "edge_type",
+        "source_id",
+        "target_id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "edge_type": {
+          "type": "string",
+          "enum": [
+            "DERIVED_FROM"
+          ]
+        },
+        "source_id": {
+          "type": "string"
+        },
+        "target_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "GENERATED",
+      "type": "object",
+      "required": [
+        "id",
+        "edge_type",
+        "source_id",
+        "target_id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "edge_type": {
+          "type": "string",
+          "enum": [
+            "GENERATED"
+          ]
+        },
+        "source_id": {
+          "type": "string"
+        },
+        "target_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "GENERATES",
+      "type": "object",
+      "required": [
+        "id",
+        "edge_type",
+        "source_id",
+        "target_id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "edge_type": {
+          "type": "string",
+          "enum": [
+            "GENERATES"
+          ]
+        },
+        "source_id": {
+          "type": "string"
+        },
+        "target_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "HAS",
+      "type": "object",
+      "required": [
+        "id",
+        "edge_type",
+        "source_id",
+        "target_id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "edge_type": {
+          "type": "string",
+          "enum": [
+            "HAS"
+          ]
+        },
+        "source_id": {
+          "type": "string"
+        },
+        "target_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "HAS_TIMESTAMP",
+      "type": "object",
+      "required": [
+        "id",
+        "edge_type",
+        "source_id",
+        "target_id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "edge_type": {
+          "type": "string",
+          "enum": [
+            "HAS_TIMESTAMP"
+          ]
+        },
+        "source_id": {
+          "type": "string"
+        },
+        "target_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "INFLUENCES",
+      "type": "object",
+      "required": [
+        "id",
+        "edge_type",
+        "source_id",
+        "target_id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "edge_type": {
+          "type": "string",
+          "enum": [
+            "INFLUENCES"
+          ]
+        },
+        "source_id": {
+          "type": "string"
+        },
+        "target_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "MADE",
+      "type": "object",
+      "required": [
+        "id",
+        "edge_type",
+        "source_id",
+        "target_id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "edge_type": {
+          "type": "string",
+          "enum": [
+            "MADE"
+          ]
+        },
+        "source_id": {
+          "type": "string"
+        },
+        "target_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "MEASURED_BY",
+      "type": "object",
+      "required": [
+        "id",
+        "edge_type",
+        "source_id",
+        "target_id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "edge_type": {
+          "type": "string",
+          "enum": [
+            "MEASURED_BY"
+          ]
+        },
+        "source_id": {
+          "type": "string"
+        },
+        "target_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "OPTIMIZED_BY",
+      "type": "object",
+      "required": [
+        "id",
+        "edge_type",
+        "source_id",
+        "target_id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "edge_type": {
+          "type": "string",
+          "enum": [
+            "OPTIMIZED_BY"
+          ]
+        },
+        "source_id": {
+          "type": "string"
+        },
+        "target_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "PROCESSED_TO",
+      "type": "object",
+      "required": [
+        "id",
+        "edge_type",
+        "source_id",
+        "target_id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "edge_type": {
+          "type": "string",
+          "enum": [
+            "PROCESSED_TO"
+          ]
+        },
+        "source_id": {
+          "type": "string"
+        },
+        "target_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "PRODUCES",
+      "type": "object",
+      "required": [
+        "id",
+        "edge_type",
+        "source_id",
+        "target_id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "edge_type": {
+          "type": "string",
+          "enum": [
+            "PRODUCES"
+          ]
+        },
+        "source_id": {
+          "type": "string"
+        },
+        "target_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "PUBLISHED_AS",
+      "type": "object",
+      "required": [
+        "id",
+        "edge_type",
+        "source_id",
+        "target_id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "edge_type": {
+          "type": "string",
+          "enum": [
+            "PUBLISHED_AS"
+          ]
+        },
+        "source_id": {
+          "type": "string"
+        },
+        "target_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "RENDERED_TO",
+      "type": "object",
+      "required": [
+        "id",
+        "edge_type",
+        "source_id",
+        "target_id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "edge_type": {
+          "type": "string",
+          "enum": [
+            "RENDERED_TO"
+          ]
+        },
+        "source_id": {
+          "type": "string"
+        },
+        "target_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "REQUIRES",
+      "type": "object",
+      "required": [
+        "id",
+        "edge_type",
+        "source_id",
+        "target_id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "edge_type": {
+          "type": "string",
+          "enum": [
+            "REQUIRES"
+          ]
+        },
+        "source_id": {
+          "type": "string"
+        },
+        "target_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "USED_IN",
+      "type": "object",
+      "required": [
+        "id",
+        "edge_type",
+        "source_id",
+        "target_id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "edge_type": {
+          "type": "string",
+          "enum": [
+            "USED_IN"
+          ]
+        },
+        "source_id": {
+          "type": "string"
+        },
+        "target_id": {
+          "type": "string"
+        },
+        "properties": {
+          "type": "object"
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  ]
+}

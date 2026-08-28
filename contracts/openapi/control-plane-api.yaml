@@ -1,0 +1,605 @@
+openapi: 3.1.0
+info:
+  title: Control Plane API
+  version: 1.0.0
+  description: Human control plane, API/domain governance, channel management, approvals, overrides
+servers:
+  - url: /api/v1
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /ready:
+    get:
+      operationId: readinessCheck
+      summary: Readiness check
+      responses:
+        "200":
+          description: Ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /channels:
+    get:
+      operationId: listChannels
+      summary: List all channels
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, paused, archived]
+      responses:
+        "200":
+          description: Paginated channel list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Channel"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+    post:
+      operationId: createChannel
+      summary: Create a new channel
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChannelCreate"
+      responses:
+        "201":
+          description: Channel created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Channel"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Channel name already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /channels/{channel_id}:
+    get:
+      operationId: getChannel
+      summary: Get channel by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: channel_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Channel details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Channel"
+        "404":
+          description: Channel not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateChannel
+      summary: Update channel
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: channel_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChannelUpdate"
+      responses:
+        "200":
+          description: Channel updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Channel"
+    delete:
+      operationId: deleteChannel
+      summary: Delete/archive channel
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: channel_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Channel deleted
+        "404":
+          description: Channel not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /channels/{channel_id}/autonomy:
+    get:
+      operationId: getChannelAutonomy
+      summary: Get channel autonomy level
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: channel_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Autonomy configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutonomyConfig"
+    put:
+      operationId: setChannelAutonomy
+      summary: Set channel autonomy level
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: channel_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutonomyConfig"
+      responses:
+        "200":
+          description: Autonomy updated
+  /approvals:
+    get:
+      operationId: listApprovals
+      summary: List pending approvals
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, rejected, escalated]
+        - name: channel_id
+          in: query
+          schema:
+            type: string
+        - name: entity_type
+          in: query
+          schema:
+            type: string
+            enum: [SCRIPT, VIDEO, THUMBNAIL, CLIP, PUBLICATION, POLICY]
+      responses:
+        "200":
+          description: Approval list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApprovalItem"
+  /approvals/{approval_id}/approve:
+    post:
+      operationId: approveItem
+      summary: Approve an item
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: approval_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                notes:
+                  type: string
+      responses:
+        "200":
+          description: Approved
+  /approvals/{approval_id}/reject:
+    post:
+      operationId: rejectItem
+      summary: Reject an item
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: approval_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        "200":
+          description: Rejected
+  /overrides:
+    post:
+      operationId: createOverride
+      summary: Apply human override
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OverrideRequest"
+      responses:
+        "201":
+          description: Override applied
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OverrideRecord"
+  /audit-logs:
+    get:
+      operationId: listAuditLogs
+      summary: Query audit logs
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: channel_id
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: action
+          in: query
+          schema:
+            type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: Audit log entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AuditLogEntry"
+                  pagination:
+                    $ref: "#/components/schemas/Pagination"
+  /audit-logs/{log_id}:
+    get:
+      operationId: getAuditLog
+      summary: Get single audit log entry
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: log_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Audit log entry
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLogEntry"
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, timestamp]
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy, degraded]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+        checks:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status:
+                type: string
+                enum: [pass, fail, warn]
+              latency_ms:
+                type: number
+    ErrorResponse:
+      type: object
+      required: [error_code, message, trace_id]
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        trace_id:
+          type: string
+        details:
+          type: object
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+    Channel:
+      type: object
+      required: [channel_id, name, status, created_at]
+      properties:
+        channel_id:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [active, paused, archived]
+        autonomy_level:
+          type: string
+          enum: [L0, L1, L2, L3, L4]
+        brand_policy:
+          type: object
+        budget:
+          type: object
+          properties:
+            monthly_max_usd:
+              type: number
+            current_month_spend_usd:
+              type: number
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ChannelCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+        autonomy_level:
+          type: string
+          enum: [L0, L1, L2, L3, L4]
+        brand_policy:
+          type: object
+    ChannelUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+        status:
+          type: string
+          enum: [active, paused, archived]
+        autonomy_level:
+          type: string
+          enum: [L0, L1, L2, L3, L4]
+        brand_policy:
+          type: object
+    AutonomyConfig:
+      type: object
+      required: [level, rules]
+      properties:
+        level:
+          type: string
+          enum: [L0, L1, L2, L3, L4]
+        rules:
+          type: object
+          properties:
+            auto_publish_risk_threshold:
+              type: number
+            human_approval_risk_threshold:
+              type: number
+            blocked_risk_threshold:
+              type: number
+            max_daily_spend_usd:
+              type: number
+    ApprovalItem:
+      type: object
+      required: [approval_id, entity_type, entity_id, status]
+      properties:
+        approval_id:
+          type: string
+        entity_type:
+          type: string
+          enum: [SCRIPT, VIDEO, THUMBNAIL, CLIP, PUBLICATION, POLICY]
+        entity_id:
+          type: string
+        status:
+          type: string
+          enum: [pending, approved, rejected, escalated]
+        risk_score:
+          type: number
+        requested_by:
+          type: string
+        requested_at:
+          type: string
+          format: date-time
+        reviewed_by:
+          type: string
+        reviewed_at:
+          type: string
+          format: date-time
+        notes:
+          type: string
+    OverrideRequest:
+      type: object
+      required: [entity_type, entity_id, reason_code, new_value]
+      properties:
+        entity_type:
+          type: string
+        entity_id:
+          type: string
+        reason_code:
+          type: string
+        original_version:
+          type: string
+        new_value:
+          type: object
+        user_id:
+          type: string
+    OverrideRecord:
+      type: object
+      required: [override_id, timestamp]
+      properties:
+        override_id:
+          type: string
+        user_id:
+          type: string
+        entity_type:
+          type: string
+        entity_id:
+          type: string
+        reason_code:
+          type: string
+        original_version:
+          type: string
+        new_version:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+    AuditLogEntry:
+      type: object
+      required: [id, timestamp, action, resource_type, success]
+      properties:
+        id:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        user_id:
+          type: string
+        agent_type:
+          type: string
+        action:
+          type: string
+        resource_type:
+          type: string
+        resource_id:
+          type: string
+        details:
+          type: object
+        channel_id:
+          type: string
+        tenant_id:
+          type: string
+        success:
+          type: boolean
+        error_message:
+          type: string
+        ip_address:
+          type: string
+        user_agent:
+          type: string
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key

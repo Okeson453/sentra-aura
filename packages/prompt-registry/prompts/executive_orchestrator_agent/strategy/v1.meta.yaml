@@ -1,0 +1,64 @@
+description: High-level content strategy and planning prompt for the Executive Orchestrator agent
+author: SentraAura Engineering
+version: v1
+created_at: "2026-08-16"
+updated_at: "2026-08-16"
+tags: [strategy, planning, orchestration, executive]
+variables:
+  - name: channel_name
+    type: string
+    required: true
+    description: Name of the YouTube channel
+  - name: portfolio_name
+    type: string
+    required: false
+    description: Portfolio this channel belongs to
+  - name: autonomy_level
+    type: enum
+    required: false
+    allowed_values: [L0, L1, L2, L3, L4]
+    description: Autonomy risk level for decision-making
+  - name: budget_remaining
+    type: number
+    required: false
+    description: Remaining production budget in USD
+  - name: current_date
+    type: string
+    required: false
+    description: Current date for planning context
+  - name: planning_horizon
+    type: string
+    required: false
+    description: Time period for strategy (e.g., "30 days")
+  - name: trend_signals
+    type: array
+    required: false
+    description: List of detected trend signals
+  - name: audience_insights
+    type: string
+    required: false
+    description: Formatted audience intelligence report
+  - name: performance_history
+    type: string
+    required: false
+    description: Recent performance metrics summary
+  - name: max_videos_per_week
+    type: number
+    required: false
+    description: Publishing frequency constraint
+  - name: avg_video_length
+    type: string
+    required: false
+    description: Target video duration
+  - name: brand_safety_level
+    type: enum
+    required: false
+    allowed_values: [minimal, standard, strict, maximum]
+  - name: human_approval_gates
+    type: string
+    required: false
+    description: Which decisions require human sign-off
+output_format: json
+output_schema:
+  type: object
+  required: [strategy_summary, content_pillars, publishing_schedule, resource_allocation, risk_mitigation, kpis]

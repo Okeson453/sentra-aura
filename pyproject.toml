@@ -1,0 +1,158 @@
+[tool.poetry]
+name = "sentra-aura"
+version = "0.1.0"
+description = "SentraAura — Autonomous AI Media Operating System (monorepo workspace root)"
+authors = ["SentraAura Engineering <engineering@sentraaura.com>"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.11"
+
+# --- Web / API ---
+fastapi = ">=0.109,<1"
+uvicorn = {extras = ["standard"], version = ">=0.27,<1"}
+starlette = ">=0.36,<1"
+httpx = ">=0.26,<1"
+python-multipart = ">=0.0.9"
+jinja2 = ">=3.1,<4"
+
+# --- Data / validation ---
+pydantic = ">=2.5,<3"
+pydantic-settings = ">=2.1,<3"
+sqlalchemy = {extras = ["asyncio"], version = ">=2.0,<3"}
+asyncpg = ">=0.29,<1"
+alembic = ">=1.13,<2"
+redis = ">=5.0,<6"
+nats-py = ">=2.7,<3"
+pyyaml = ">=6.0,<7"
+jsonschema = ">=4.20,<5"
+
+# --- Auth / security ---
+PyJWT = ">=2.8,<3"
+
+# --- Observability ---
+opentelemetry-api = ">=1.23,<2"
+opentelemetry-sdk = ">=1.23,<2"
+opentelemetry-exporter-otlp = ">=1.23,<2"
+prometheus-client = ">=0.20,<1"
+structlog = ">=24.1,<26"
+
+# --- Workflows / cloud / storage ---
+temporalio = ">=1.5,<2"
+boto3 = ">=1.34,<2"
+botocore = ">=1.34,<2"
+azure-cognitiveservices-speech = ">=1.35,<2"
+stripe = ">=8.0,<12"
+aiosmtplib = ">=3.0,<4"
+
+# --- AI provider SDKs (provider-gateway adapters) ---
+openai = ">=1.12,<2"
+anthropic = ">=0.18,<1"
+cohere = ">=5.0,<6"
+elevenlabs = ">=0.3,<2"
+mistralai = ">=0.1,<2"
+google-generativeai = ">=0.3,<1"
+
+# --- Analytics / ML helpers ---
+numpy = ">=1.26,<3"
+scipy = ">=1.12,<2"
+pandas = ">=2.2,<3"
+clickhouse-connect = ">=0.7,<1"
+
+# --- CLI ---
+typer = ">=0.12,<1"
+
+# --- Internal workspace packages (path deps) ---
+sentinel-exceptions = {path = "packages/sentinel-exceptions", develop = true}
+sentinel-security = {path = "packages/sentinel-security", develop = true}
+observability = {path = "packages/observability", develop = true}
+service-kit = {path = "packages/service-kit", develop = true}
+agent-contracts = {path = "packages/agent-contracts", develop = true}
+sentra-aura-prompt-registry = {path = "packages/prompt-registry", develop = true}
+provider-interfaces = {path = "packages/provider-interfaces", develop = true}
+event-bus = {path = "packages/event-bus", develop = true}
+event-schemas = {path = "packages/event-schemas", develop = true}
+content-graph-client = {path = "packages/content-graph-client", develop = true}
+sentra-api-clients = {path = "packages/api-clients", develop = true}
+test-factory = {path = "packages/test-factory", develop = true}
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8.0,<9"
+pytest-asyncio = ">=0.23,<1"
+pytest-cov = ">=4.1,<7"
+mypy = ">=1.8,<2"
+ruff = ">=0.2,<1"
+
+[build-system]
+requires = ["poetry-core>=1.9.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = [
+    "packages/agent-contracts/src",
+    "packages/api-clients/src",
+    "packages/content-graph-client/src",
+    "packages/event-bus/src",
+    "packages/event-schemas/src",
+    "packages/observability/src",
+    "packages/prompt-registry/src",
+    "packages/provider-interfaces/src",
+    "packages/sentinel-exceptions/src",
+    "packages/sentinel-security/src",
+    "packages/service-kit/src",
+    "packages/test-factory/src",
+    "services/agent-registry-service/src",
+    "services/agent-runtime/src",
+    "services/analytics-ingestion/src",
+    "services/asset-store/src",
+    "services/billing-service/src",
+    "services/clipping-engine/src",
+    "services/content-graph-service/src",
+    "services/control-plane-api/src",
+    "services/data-ingestion-pipeline/src",
+    "services/media-renderer/src",
+    "services/model-eval-service/src",
+    "services/notification-service/src",
+    "services/orchestrator/src",
+    "services/policy-engine/src",
+    "services/provider-gateway/src",
+    "services/publishing-service/src",
+    "services/research-service/src",
+    "services/rights-registry-service/src",
+    "tools/sentra-cli/src",
+    "services/agent-runtime/src/agent_runtime/agents/clipping/ai_clipping_agent/src",
+    "services/agent-runtime/src/agent_runtime/agents/clipping/captioning_agent/src",
+    "services/agent-runtime/src/agent_runtime/agents/clipping/reframing_agent/src",
+    "services/agent-runtime/src/agent_runtime/agents/clipping/repurposing_agent/src",
+    "services/agent-runtime/src/agent_runtime/agents/distribution/community_engagement_agent/src",
+    "services/agent-runtime/src/agent_runtime/agents/distribution/publishing_agent/src",
+    "services/agent-runtime/src/agent_runtime/agents/distribution/scheduling_agent/src",
+    "services/agent-runtime/src/agent_runtime/agents/distribution/seo_packaging_agent/src",
+    "services/agent-runtime/src/agent_runtime/agents/distribution/thumbnail_agent/src",
+    "services/agent-runtime/src/agent_runtime/agents/operations/analytics_agent/src",
+    "services/agent-runtime/src/agent_runtime/agents/operations/compliance_agent/src",
+    "services/agent-runtime/src/agent_runtime/agents/operations/cost_control_agent/src",
+    "services/agent-runtime/src/agent_runtime/agents/operations/crisis_sentiment_anomaly_agent/src",
+    "services/agent-runtime/src/agent_runtime/agents/operations/experimentation_agent/src",
+    "services/agent-runtime/src/agent_runtime/agents/operations/memory_agent/src",
+    "services/agent-runtime/src/agent_runtime/agents/operations/optimization_agent/src",
+    "services/agent-runtime/src/agent_runtime/agents/operations/quality_control_agent/src",
+    "services/agent-runtime/src/agent_runtime/agents/operations/rights_remediation_agent/src",
+]
+testpaths = [
+    "packages",
+    "services",
+    "tools",
+]
+addopts = "-v --tb=short --import-mode=importlib"
+
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true

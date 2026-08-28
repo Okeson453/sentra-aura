@@ -1,0 +1,332 @@
+openapi: 3.1.0
+info:
+  title: Research Service
+  version: 1.0.0
+  description: Deep research, source credibility scoring, fact-checking, claim extraction
+servers:
+  - url: /api/v1
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /ready:
+    get:
+      operationId: readinessCheck
+      summary: Readiness check
+      responses:
+        "200":
+          description: Ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /research:
+    post:
+      operationId: startResearch
+      summary: Start a research query
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResearchRequest"
+      responses:
+        "202":
+          description: Research job started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResearchJob"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /research/jobs/{job_id}:
+    get:
+      operationId: getResearchJob
+      summary: Get research job status
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Job status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResearchJob"
+  /research/jobs/{job_id}/results:
+    get:
+      operationId: getResearchResults
+      summary: Get research results
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Research results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResearchResult"
+  /fact-check:
+    post:
+      operationId: factCheck
+      summary: Fact-check a claim
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FactCheckRequest"
+      responses:
+        "200":
+          description: Fact-check result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FactCheckResult"
+  /claims/extract:
+    post:
+      operationId: extractClaims
+      summary: Extract factual claims from text
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text:
+                  type: string
+                min_confidence:
+                  type: number
+                  default: 0.7
+      responses:
+        "200":
+          description: Extracted claims
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Claim"
+  /sources:
+    post:
+      operationId: addSource
+      summary: Add a research source
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResearchSource"
+      responses:
+        "201":
+          description: Source added
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResearchSource"
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, timestamp]
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy, degraded]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+        checks:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status:
+                type: string
+                enum: [pass, fail, warn]
+              latency_ms:
+                type: number
+    ErrorResponse:
+      type: object
+      required: [error_code, message, trace_id]
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        trace_id:
+          type: string
+        details:
+          type: object
+    ResearchRequest:
+      type: object
+      required: [query, channel_id]
+      properties:
+        query:
+          type: string
+        channel_id:
+          type: string
+        depth:
+          type: string
+          enum: [quick, standard, deep]
+          default: standard
+        max_sources:
+          type: integer
+          default: 10
+        topic_domains:
+          type: array
+          items:
+            type: string
+    ResearchJob:
+      type: object
+      required: [job_id, status, query]
+      properties:
+        job_id:
+          type: string
+        status:
+          type: string
+          enum: [queued, running, completed, failed]
+        query:
+          type: string
+        progress_percent:
+          type: integer
+        sources_found:
+          type: integer
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+    ResearchResult:
+      type: object
+      required: [job_id, summary, sources]
+      properties:
+        job_id:
+          type: string
+        summary:
+          type: string
+        key_findings:
+          type: array
+          items:
+            type: string
+        sources:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResearchSource"
+        claims:
+          type: array
+          items:
+            $ref: "#/components/schemas/Claim"
+        confidence_score:
+          type: number
+    ResearchSource:
+      type: object
+      required: [source_id, url, title]
+      properties:
+        source_id:
+          type: string
+        url:
+          type: string
+        title:
+          type: string
+        author:
+          type: string
+        published_at:
+          type: string
+          format: date-time
+        credibility_score:
+          type: number
+        domain_authority:
+          type: number
+        source_type:
+          type: string
+          enum: [academic, news, blog, social, government, industry]
+    Claim:
+      type: object
+      required: [claim_text, confidence]
+      properties:
+        claim_text:
+          type: string
+        confidence:
+          type: number
+        source_ids:
+          type: array
+          items:
+            type: string
+        verified:
+          type: boolean
+        verification_status:
+          type: string
+          enum: [verified, disputed, unverified, false]
+    FactCheckRequest:
+      type: object
+      required: [claim_text]
+      properties:
+        claim_text:
+          type: string
+        context:
+          type: string
+        channel_id:
+          type: string
+    FactCheckResult:
+      type: object
+      required: [claim_text, verdict]
+      properties:
+        claim_text:
+          type: string
+        verdict:
+          type: string
+          enum: [true, mostly_true, mixed, mostly_false, false, unverifiable]
+        confidence:
+          type: number
+        explanation:
+          type: string
+        sources:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResearchSource"
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key

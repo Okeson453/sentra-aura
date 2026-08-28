@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "test-factory"
+version = "0.1.0"
+description = "Test factories and harnesses for SentraAura"
+authors = ["SentraAura Engineering <engineering@sentraaura.com>"]
+packages = [{include = "test_factory", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+httpx = "^0.26"
+fastapi = "^0.109"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+pytest-asyncio = "^0.23"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

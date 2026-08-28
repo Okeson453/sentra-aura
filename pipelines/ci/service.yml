@@ -1,0 +1,285 @@
+# ------------------------------------------------------------------------------
+# SentraAura — Service CI Pipeline
+# Implements Backend-Infrastructure-DevOps.md §7.2
+# 9-stage CI: lint/typecheck, unit tests, contract tests, build/SBOM/scan/sign,
+# integration tests, workflow tests, media quality tests, agent evaluation,
+# security scan.
+# ------------------------------------------------------------------------------
+
+stages:
+  - lint-typecheck
+  - unit-tests
+  - contract-tests
+  - build-scan-sign
+  - integration-tests
+  - workflow-tests
+  - media-quality-tests
+  - agent-evaluation
+  - security-scan
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+  PYTHON_VERSION: "3.12"
+  POETRY_VERSION: "1.8.0"
+
+# Stage 1: Lint & Type Check
+lint-typecheck:
+  stage: lint-typecheck
+  image: python:${PYTHON_VERSION}
+  before_script:
+    - pip install ruff==0.6.3 mypy==1.11.0
+    - pip install -e ./packages/service-kit
+    - pip install -e ./packages/sentinel-exceptions
+  script:
+    - ruff check services/ packages/ --output-format=github
+    - ruff format --check services/ packages/
+    - mypy --strict services/ packages/
+    - |
+      python -c "
+      import os, sys
+      errors = 0
+      for domain in os.listdir('services/agent-runtime/src/agent_runtime/agents'):
+          domain_path = f'services/agent-runtime/src/agent_runtime/agents/{domain}'
+          if not os.path.isdir(domain_path) or domain.startswith('_'): continue
+          for agent in os.listdir(domain_path):
+              agent_path = f'{domain_path}/{agent}'
+              if not os.path.isdir(agent_path) or agent.startswith('_'): continue
+              required = ['agent.py', 'schemas.py', 'config.py', 'state.py', 'tools.py', 'README.md']
+              for f in required:
+                  if not os.path.exists(f'{agent_path}/{f}'):
+                      print(f'MISSING: {agent_path}/{f}')
+                      errors += 1
+      if errors: sys.exit(1)
+      print('Agent structure OK')
+      "
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# Stage 2: Unit Tests
+unit-tests:
+  stage: unit-tests
+  image: python:${PYTHON_VERSION}
+  needs: [lint-typecheck]
+  parallel:
+    matrix:
+      - SERVICE:
+          - control-plane-api
+          - orchestrator
+          - data-ingestion-pipeline
+          - content-graph-service
+          - policy-engine
+          - asset-store
+          - agent-runtime
+          - provider-gateway
+          - clipping-engine
+          - media-renderer
+          - research-service
+          - analytics-ingestion
+          - event-schema-registry
+          - quota-broker
+          - rights-registry-service
+          - publishing-service
+          - notification-service
+          - agent-registry-service
+          - model-eval-service
+          - billing-service
+  before_script:
+    - pip install pytest pytest-asyncio pytest-cov httpx
+    - |
+      if [ -f "services/${SERVICE}/pyproject.toml" ]; then
+        pip install -e ./services/${SERVICE}
+      fi
+    - pip install -e ./packages/service-kit
+    - pip install -e ./packages/test-factory
+  script:
+    - pytest services/${SERVICE}/tests/unit
+        --cov=services/${SERVICE}/src
+        --cov-report=xml
+        --cov-fail-under=85
+        -v
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    paths:
+      - coverage.xml
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# Stage 3: Contract Tests
+contract-tests:
+  stage: contract-tests
+  image: python:${PYTHON_VERSION}
+  needs: [lint-typecheck]
+  before_script:
+    - pip install jsonschema PyYAML openapi-spec-validator
+    - pip install -e ./packages/agent-contracts
+    - pip install -e ./packages/event-schemas
+  script:
+    - |
+      for spec in contracts/openapi/*.yaml; do
+        echo "Validating $spec"
+        python -m openapi_spec_validator "$spec"
+      done
+    - |
+      python -c "
+      import json, jsonschema, os
+      schema_dir = 'contracts/events/v1'
+      for f in os.listdir(schema_dir):
+          if f.endswith('.json'):
+              with open(f'{schema_dir}/{f}') as fh:
+                  schema = json.load(fh)
+              jsonschema.Draft7Validator.check_schema(schema)
+              print(f'Valid: {f}')
+      print('All event schemas valid')
+      "
+    - |
+      python -c "
+      import json, jsonschema
+      with open('contracts/agent-messages/envelope.json') as f:
+          schema = json.load(f)
+      jsonschema.Draft7Validator.check_schema(schema)
+      print('AgentMessage envelope schema valid')
+      "
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# Stage 4: Build, SBOM, Scan & Sign
+build-scan-sign:
+  stage: build-scan-sign
+  image: docker:24-dind
+  needs: [unit-tests, contract-tests]
+  services:
+    - docker:24-dind
+  parallel:
+    matrix:
+      - SERVICE:
+          - control-plane-api
+          - orchestrator
+          - data-ingestion-pipeline
+          - content-graph-service
+          - policy-engine
+          - asset-store
+          - agent-runtime
+          - provider-gateway
+          - clipping-engine
+          - media-renderer
+          - research-service
+          - publishing-service
+          - notification-service
+          - agent-registry-service
+          - model-eval-service
+          - billing-service
+  before_script:
+    - apk add --no-cache curl jq
+  script:
+    - docker build -t sentra/${SERVICE}:${CI_COMMIT_SHA}
+        -f services/${SERVICE}/Dockerfile .
+    - |
+      # Generate SBOM with Syft
+      curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
+      syft sentra/${SERVICE}:${CI_COMMIT_SHA} -o spdx-json=sbom-${SERVICE}.json
+    - |
+      # Scan with Grype
+      curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin
+      grype sentra/${SERVICE}:${CI_COMMIT_SHA} --fail-on high
+    - |
+      # Sign with Cosign
+      if [ "$CI_COMMIT_BRANCH" == "$CI_DEFAULT_BRANCH" ]; then
+        echo "$CI_REGISTRY_PASSWORD" | docker login $CI_REGISTRY -u $CI_REGISTRY_USER --password-stdin
+        docker tag sentra/${SERVICE}:${CI_COMMIT_SHA} $CI_REGISTRY/sentra-aura/${SERVICE}:${CI_COMMIT_SHA}
+        docker push $CI_REGISTRY/sentra-aura/${SERVICE}:${CI_COMMIT_SHA}
+      fi
+  artifacts:
+    paths:
+      - sbom-*.json
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# Stage 5: Integration Tests
+integration-tests:
+  stage: integration-tests
+  image: docker:24-dind
+  needs: [build-scan-sign]
+  services:
+    - docker:24-dind
+  before_script:
+    - apk add --no-cache python3 py3-pip
+    - pip3 install pytest pytest-asyncio httpx
+  script:
+    - docker compose -f local/docker-compose.yml up -d --wait
+    - sleep 30
+    - pytest tests/integration -v --base-url http://localhost:8000
+  after_script:
+    - docker compose -f local/docker-compose.yml down -v
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# Stage 6: Workflow Tests
+workflow-tests:
+  stage: workflow-tests
+  image: python:${PYTHON_VERSION}
+  needs: [integration-tests]
+  before_script:
+    - pip install pytest pytest-asyncio temporalio
+    - curl -sSf https://get.temporal.io | bash
+  script:
+    - temporal server start-dev &
+    - sleep 5
+    - pytest tests/workflow -v --temporal-test-server
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# Stage 7: Media Quality Tests
+media-quality-tests:
+  stage: media-quality-tests
+  image: python:${PYTHON_VERSION}
+  needs: [integration-tests]
+  before_script:
+    - pip install -e ./packages/service-kit
+  script:
+    - python -m tools.qc_gate_runner --fixtures tests/fixtures/golden_assets
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+# Stage 8: Agent Evaluation
+agent-evaluation:
+  stage: agent-evaluation
+  image: python:${PYTHON_VERSION}
+  needs: [integration-tests]
+  before_script:
+    - pip install -e ./services/model-eval-service
+  script:
+    - python -m model_eval_service.run_offline_eval --gate-on-regression
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+      changes:
+        - services/agent-runtime/**/*
+        - packages/prompt-registry/**/*
+        - evals/**/*
+
+# Stage 9: Security Scan
+security-scan:
+  stage: security-scan
+  image: python:${PYTHON_VERSION}
+  needs: [build-scan-sign]
+  before_script:
+    - pip install bandit detect-secrets
+    - curl -sSfL https://github.com/returntocorp/semgrep/releases/latest/download/semgrep-linux-x86_64 -o /usr/local/bin/semgrep
+    - chmod +x /usr/local/bin/semgrep
+  script:
+    - semgrep --config=p/security-audit --config=p/owasp-top-ten --config=p/cwe-top-25 services/ packages/
+    - bandit -r services/ packages/ -f json -o bandit-report.json || true
+    - detect-secrets scan --all-files --force-use-all-plugins > .secrets.baseline
+  artifacts:
+    paths:
+      - bandit-report.json
+      - .secrets.baseline
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

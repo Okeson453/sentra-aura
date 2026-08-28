@@ -1,0 +1,30 @@
+description: Deep research and source gathering prompt for the Research Agent
+author: SentraAura Engineering
+version: v1
+created_at: "2026-08-16"
+updated_at: "2026-08-16"
+tags: [research, gathering, sources, credibility]
+variables:
+  - name: topic
+    type: string
+    required: true
+  - name: depth
+    type: enum
+    required: false
+    allowed_values: [quick, standard, deep]
+  - name: channel_name
+    type: string
+    required: false
+  - name: max_sources
+    type: number
+    required: false
+  - name: initial_query
+    type: string
+    required: false
+  - name: topic_domains
+    type: array
+    required: false
+  - name: existing_sources
+    type: string
+    required: false
+output_format: json

@@ -1,0 +1,118 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AgentMessage",
+  "description": "Canonical envelope for all agent communication in SentraAura",
+  "type": "object",
+  "required": [
+    "message_id",
+    "correlation_id",
+    "parent_workflow_id",
+    "agent_type",
+    "task_type",
+    "payload",
+    "trace_id",
+    "deadline",
+    "priority",
+    "budget"
+  ],
+  "properties": {
+    "message_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "correlation_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "parent_workflow_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "agent_type": {
+      "type": "string",
+      "enum": [
+        "EXECUTIVE_ORCHESTRATOR",
+        "PORTFOLIO_STRATEGY",
+        "MARKET_AUDIENCE_INTELLIGENCE",
+        "RESEARCH",
+        "FACT_VERIFICATION",
+        "CONTENT_STRATEGIST_IDEATION",
+        "SCRIPTING",
+        "VOICE",
+        "VISUAL_ASSET",
+        "SCENE_SHOT",
+        "VIDEO_PRODUCTION",
+        "LOCALIZATION",
+        "AI_CLIPPING",
+        "REFRAMING",
+        "CAPTIONING",
+        "REPURPOSING",
+        "THUMBNAIL",
+        "SEO_PACKAGING",
+        "SCHEDULING",
+        "PUBLISHING",
+        "COMMUNITY_ENGAGEMENT",
+        "RIGHTS_REMEDIATION",
+        "CRISIS_SENTIMENT_ANOMALY",
+        "ANALYTICS",
+        "EXPERIMENTATION",
+        "OPTIMIZATION",
+        "QUALITY_CONTROL",
+        "COMPLIANCE",
+        "COST_CONTROL",
+        "MEMORY"
+      ]
+    },
+    "task_type": {
+      "type": "string"
+    },
+    "payload": {
+      "type": "object"
+    },
+    "state": {
+      "type": "object"
+    },
+    "trace_id": {
+      "type": "string"
+    },
+    "deadline": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "priority": {
+      "type": "string",
+      "enum": [
+        "LOW",
+        "NORMAL",
+        "HIGH",
+        "CRITICAL"
+      ]
+    },
+    "budget": {
+      "type": "object",
+      "required": [
+        "max_cost_usd",
+        "currency"
+      ],
+      "properties": {
+        "max_cost_usd": {
+          "type": "number"
+        },
+        "currency": {
+          "type": "string"
+        },
+        "spent_usd": {
+          "type": "number"
+        }
+      }
+    },
+    "retry_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

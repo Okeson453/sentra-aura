@@ -1,0 +1,51 @@
+# NATS JetStream values for SentraAura
+config:
+  jetstream:
+    enabled: true
+    maxMemoryStore: 8Gi
+    maxFileStore: 100Gi
+    storeDir: /data/jetstream
+
+  cluster:
+    enabled: true
+    replicas: 3
+
+  leafnodes:
+    enabled: true
+
+  websocket:
+    enabled: true
+    port: 8080
+
+  mqtt:
+    enabled: false
+
+natsBox:
+  enabled: false
+
+promExporter:
+  enabled: true
+  port: 7777
+
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: sentra.io/node-pool
+              operator: In
+              values:
+                - ${node_pool}
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: 2000m
+    memory: 8Gi
+
+persistence:
+  enabled: true
+  size: 100Gi
+  storageClassName: gp3

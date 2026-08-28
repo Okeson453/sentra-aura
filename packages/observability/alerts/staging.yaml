@@ -1,0 +1,56 @@
+groups:
+  - name: sentraaura_staging
+    rules:
+      - alert: HighFailureRate
+        expr: rate(sentra_workflow_failures_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High failure rate detected"
+          action: page_engineer
+
+      - alert: QueueBacklog
+        expr: sentra_queue_depth > 1000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Queue depth exceeds threshold"
+          action: scale_workers
+
+      - alert: CostBudgetExceeded
+        expr: sentra_daily_cost > sentra_daily_budget * 1.2
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Daily cost budget exceeded by 20%"
+          action: notify_budget_owner
+
+      - alert: AIAPILatencySpike
+        expr: histogram_quantile(0.95, rate(llm_latency_seconds_bucket[3m])) > 2.0
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 LLM latency > 2s"
+          action: check_provider_health
+
+      - alert: QualityDrop
+        expr: sentra_quality_score < 0.7
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Quality score below threshold for 3+ consecutive videos"
+          action: "pause_workflow, notify_editor"
+
+      - alert: PublishFailures
+        expr: increase(sentra_publish_failures_total[10m]) >= 3
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "3 consecutive publish failures"
+          action: "page_engineer, pause_publishing"

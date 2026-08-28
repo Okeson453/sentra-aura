@@ -1,0 +1,14 @@
+{
+  "video_id": "vid-sample-001",
+  "channel_id": "ch-sample-001",
+  "views": 15000,
+  "likes": 750,
+  "comments": 120,
+  "shares": 45,
+  "watch_time_seconds": 1200000,
+  "average_view_duration_seconds": 280.5,
+  "ctr": 0.065,
+  "retention_curve": [1.0, 0.85, 0.72, 0.60, 0.45, 0.30, 0.15],
+  "subscriber_gain": 89,
+  "measured_at": "2024-01-15T12:00:00Z"
+}

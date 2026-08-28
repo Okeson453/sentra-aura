@@ -1,0 +1,62 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ScriptDrafted",
+  "type": "object",
+  "required": [
+    "event_id",
+    "event_type",
+    "timestamp",
+    "channel_id",
+    "script_id",
+    "topic_id"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "script.drafted"
+      ]
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "channel_id": {
+      "type": "string"
+    },
+    "script_id": {
+      "type": "string"
+    },
+    "topic_id": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "word_count": {
+      "type": "integer"
+    },
+    "scene_count": {
+      "type": "integer"
+    },
+    "hook_variants": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "predicted_retention": {
+      "type": "number"
+    },
+    "risk_score": {
+      "type": "number"
+    },
+    "sponsorship_disclosure_required": {
+      "type": "boolean"
+    }
+  }
+}

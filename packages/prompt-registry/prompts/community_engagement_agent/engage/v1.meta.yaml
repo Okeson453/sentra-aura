@@ -1,0 +1,21 @@
+version: "1.0.0"
+agent: community_engagement_agent
+task: engage
+name: "Community Engagement Agent — engage v1"
+description: >
+  Primary prompt template for the Community Engagement Agent engage task.
+  Used in the SentraAura autonomous media pipeline.
+author: "SentraAura Platform Team"
+created_at: "2026-08-16"
+model: "gpt-4o"
+temperature: 0.3
+max_tokens: 4096
+stop_sequences: []
+tags:
+  - community_engagement_agent
+  - engage
+  - batch-4
+variables:
+  - task_description
+  - context
+  - input_data

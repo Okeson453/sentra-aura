@@ -1,0 +1,135 @@
+openapi: 3.0.3
+info:
+  title: Notification Service
+  version: 1.0.0
+  description: Routes alerts and operational notifications to the correct channel.
+
+servers:
+  - url: http://localhost:8000
+    description: Local development
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /ready:
+    get:
+      summary: Readiness check
+      operationId: readinessCheck
+      responses:
+        '200':
+          description: Service is ready
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/v1/alerts:
+    post:
+      summary: Send an alert
+      operationId: sendAlert
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Alert'
+      responses:
+        '200':
+          description: Alert routed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlertResponse'
+
+  /api/v1/alerts/{alert_id}/acknowledge:
+    post:
+      summary: Acknowledge an alert
+      operationId: acknowledgeAlert
+      parameters:
+        - name: alert_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Alert acknowledged
+        '404':
+          description: Alert not found
+
+  /api/v1/routing:
+    get:
+      summary: Get routing table
+      operationId: getRoutingTable
+      responses:
+        '200':
+          description: Current routing configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: array
+                  items:
+                    type: string
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        service:
+          type: string
+
+    Alert:
+      type: object
+      required:
+        - alert_id
+        - severity
+        - title
+        - message
+        - source_service
+      properties:
+        alert_id:
+          type: string
+        severity:
+          type: string
+          enum: [info, warning, error, critical]
+        title:
+          type: string
+        message:
+          type: string
+        source_service:
+          type: string
+        channel_id:
+          type: string
+        metadata:
+          type: object
+        timestamp:
+          type: number
+
+    AlertResponse:
+      type: object
+      properties:
+        alert_id:
+          type: string
+        routed:
+          type: boolean
+        channels:
+          type: array
+          items:
+            type: string
+        results:
+          type: object

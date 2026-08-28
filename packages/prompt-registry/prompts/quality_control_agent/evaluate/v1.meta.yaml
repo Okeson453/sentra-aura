@@ -1,0 +1,21 @@
+version: "1.0.0"
+agent: quality_control_agent
+task: evaluate
+name: "Quality Control Agent — evaluate v1"
+description: >
+  Primary prompt template for the Quality Control Agent evaluate task.
+  Used in the SentraAura autonomous media pipeline.
+author: "SentraAura Platform Team"
+created_at: "2026-08-16"
+model: "gpt-4o"
+temperature: 0.3
+max_tokens: 4096
+stop_sequences: []
+tags:
+  - quality_control_agent
+  - evaluate
+  - batch-4
+variables:
+  - task_description
+  - context
+  - input_data

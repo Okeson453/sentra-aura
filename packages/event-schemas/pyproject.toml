@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "event-schemas"
+version = "0.1.0"
+description = "Typed event schemas and registry client for SentraAura"
+authors = ["SentraAura Engineering <engineering@sentraaura.com>"]
+packages = [{include = "event_schemas", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+pydantic = "^2.5"
+jsonschema = "^4.21"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

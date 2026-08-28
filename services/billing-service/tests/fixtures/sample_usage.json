@@ -1,0 +1,13 @@
+{
+  "tenant_id": "tenant-sample-001",
+  "channel_id": "ch-sample-001",
+  "service_name": "agent-runtime",
+  "operation": "llm_input_token",
+  "units": 50000,
+  "metadata": {
+    "model": "gpt-4",
+    "prompt_tokens": 50000,
+    "completion_tokens": 12000
+  },
+  "timestamp": "2024-01-15T12:00:00Z"
+}

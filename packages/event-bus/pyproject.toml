@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "event-bus"
+version = "0.1.0"
+description = "NATS JetStream event bus wrapper for SentraAura"
+authors = ["SentraAura Engineering <engineering@sentraaura.com>"]
+packages = [{include = "event_bus", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+jsonschema = "^4.21"
+sentinel-exceptions = {path = "../sentinel-exceptions", develop = true}
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+pytest-asyncio = "^0.23"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

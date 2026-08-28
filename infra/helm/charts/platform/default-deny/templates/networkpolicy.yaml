@@ -1,0 +1,25 @@
+{{- range .Values.namespaces }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: {{ . }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+{{- end }}
+
+{{- range .Values.namespaces }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-egress
+  namespace: {{ . }}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+{{- end }}

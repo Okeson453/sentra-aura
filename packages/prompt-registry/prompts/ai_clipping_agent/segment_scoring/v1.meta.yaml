@@ -1,0 +1,21 @@
+version: "1.0.0"
+agent: ai_clipping_agent
+task: segment_scoring
+name: "AI Clipping Agent — segment_scoring v1"
+description: >
+  Primary prompt template for the AI Clipping Agent segment_scoring task.
+  Used in the SentraAura autonomous media pipeline.
+author: "SentraAura Platform Team"
+created_at: "2026-08-16"
+model: "gpt-4o"
+temperature: 0.3
+max_tokens: 4096
+stop_sequences: []
+tags:
+  - ai_clipping_agent
+  - segment_scoring
+  - batch-4
+variables:
+  - task_description
+  - context
+  - input_data

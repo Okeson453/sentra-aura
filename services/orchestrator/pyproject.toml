@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "orchestrator"
+version = "0.1.0"
+description = "SentraAura Orchestrator — Temporal workflows and activities"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.29.0",
+    "temporalio>=1.5.0",
+    "service-kit",
+    "sentinel-exceptions",
+    "agent-contracts",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/orchestrator"]

@@ -1,0 +1,24 @@
+# ------------------------------------------------------------------------------
+# SentraAura — Kustomization: agent-runtime
+# References the HelmRelease and applies environment-specific patches.
+# ------------------------------------------------------------------------------
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: agent-runtime
+
+resources:
+  - release.yaml
+
+patchesStrategicMerge:
+  - patches/resource-patch.yaml
+  - patches/replica-patch.yaml
+
+commonLabels:
+  app.kubernetes.io/name: agent-runtime
+  app.kubernetes.io/part-of: sentra-aura
+  sentra.io/environment: "${ENVIRONMENT}"
+
+images:
+  - name: ghcr.io/sentra-aura/agent-runtime
+    newTag: "${IMAGE_TAG}"

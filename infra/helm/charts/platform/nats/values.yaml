@@ -1,0 +1,4 @@
+replicas: 1
+image:
+  repository: nats
+  tag: "2.10"

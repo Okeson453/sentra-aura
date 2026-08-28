@@ -1,0 +1,21 @@
+version: "1.0.0"
+agent: captioning_agent
+task: caption
+name: "Captioning Agent — caption v1"
+description: >
+  Primary prompt template for the Captioning Agent caption task.
+  Used in the SentraAura autonomous media pipeline.
+author: "SentraAura Platform Team"
+created_at: "2026-08-16"
+model: "gpt-4o"
+temperature: 0.3
+max_tokens: 4096
+stop_sequences: []
+tags:
+  - captioning_agent
+  - caption
+  - batch-4
+variables:
+  - task_description
+  - context
+  - input_data

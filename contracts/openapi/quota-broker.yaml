@@ -1,0 +1,304 @@
+openapi: 3.1.0
+info:
+  title: Quota Broker
+  version: 1.0.0
+  description: Rate limiting, quota allocation, burst handling, tenant isolation
+servers:
+  - url: /api/v1
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /ready:
+    get:
+      operationId: readinessCheck
+      summary: Readiness check
+      responses:
+        "200":
+          description: Ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /quotas/{channel_id}:
+    get:
+      operationId: getQuota
+      summary: Get quota status for a channel
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: channel_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Quota status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotaStatus"
+    put:
+      operationId: setQuota
+      summary: Set quota limits for a channel
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: channel_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuotaLimits"
+      responses:
+        "200":
+          description: Quota updated
+  /quotas/{channel_id}/check:
+    post:
+      operationId: checkQuota
+      summary: Check if an operation is within quota
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: channel_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuotaCheckRequest"
+      responses:
+        "200":
+          description: Quota check result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotaCheckResult"
+  /quotas/{channel_id}/consume:
+    post:
+      operationId: consumeQuota
+      summary: Consume quota for an operation
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: channel_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuotaConsumeRequest"
+      responses:
+        "200":
+          description: Quota consumed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotaStatus"
+        "429":
+          description: Quota exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /quotas/{channel_id}/reset:
+    post:
+      operationId: resetQuota
+      summary: Reset quota counters
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: channel_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reset_type:
+                  type: string
+                  enum: [daily, monthly, all]
+      responses:
+        "200":
+          description: Quota reset
+  /rate-limits/check:
+    post:
+      operationId: checkRateLimit
+      summary: Check rate limit for an operation
+      security:
+        - apiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [key, operation]
+              properties:
+                key:
+                  type: string
+                operation:
+                  type: string
+                burst:
+                  type: boolean
+                  default: false
+      responses:
+        "200":
+          description: Rate limit check result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  allowed:
+                    type: boolean
+                  remaining:
+                    type: integer
+                  reset_at:
+                    type: string
+                    format: date-time
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, timestamp]
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy, degraded]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+        checks:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status:
+                type: string
+                enum: [pass, fail, warn]
+              latency_ms:
+                type: number
+    ErrorResponse:
+      type: object
+      required: [error_code, message, trace_id]
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        trace_id:
+          type: string
+        details:
+          type: object
+    QuotaStatus:
+      type: object
+      required: [channel_id]
+      properties:
+        channel_id:
+          type: string
+        limits:
+          $ref: "#/components/schemas/QuotaLimits"
+        used:
+          type: object
+          properties:
+            daily:
+              type: number
+            monthly:
+              type: number
+            total:
+              type: number
+        remaining:
+          type: object
+          properties:
+            daily:
+              type: number
+            monthly:
+              type: number
+        reset_at:
+          type: string
+          format: date-time
+    QuotaLimits:
+      type: object
+      properties:
+        max_daily_invocations:
+          type: integer
+        max_monthly_invocations:
+          type: integer
+        max_daily_cost_usd:
+          type: number
+        max_monthly_cost_usd:
+          type: number
+        max_concurrent_workflows:
+          type: integer
+        max_storage_gb:
+          type: number
+        max_render_minutes:
+          type: number
+    QuotaCheckRequest:
+      type: object
+      required: [operation, cost_estimate_usd]
+      properties:
+        operation:
+          type: string
+        cost_estimate_usd:
+          type: number
+        resource_units:
+          type: integer
+    QuotaCheckResult:
+      type: object
+      required: [allowed]
+      properties:
+        allowed:
+          type: boolean
+        reason:
+          type: string
+        remaining:
+          type: object
+    QuotaConsumeRequest:
+      type: object
+      required: [operation, cost_usd]
+      properties:
+        operation:
+          type: string
+        cost_usd:
+          type: number
+        resource_units:
+          type: integer
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key

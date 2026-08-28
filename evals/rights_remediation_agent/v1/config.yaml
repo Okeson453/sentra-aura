@@ -1,0 +1,19 @@
+# Evaluation configuration for rights_remediation_agent
+eval_version: v1
+agent_id: rights_remediation_agent
+dataset_path: dataset.jsonl
+benchmark_path: benchmark.json
+metrics:
+  - accuracy
+  - relevance
+  - safety
+  - latency_ms
+  - cost_usd
+thresholds:
+  min_accuracy: 0.80
+  min_relevance: 0.75
+  max_latency_ms: 5000
+  max_cost_usd: 0.50
+provider:
+  gateway_url: http://provider-gateway:8000
+  fallback_enabled: true

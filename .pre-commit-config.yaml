@@ -1,0 +1,25 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.3.0
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - pydantic
+          - types-python-jose
+          - types-passlib
+
+  - repo: local
+    hooks:
+      - id: contract-check
+        name: Contract Schema Check
+        entry: python -c "print('Contract check placeholder — runs in CI')"
+        language: system
+        pass_filenames: false
+        always_run: true

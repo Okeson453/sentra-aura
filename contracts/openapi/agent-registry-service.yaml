@@ -1,0 +1,311 @@
+openapi: 3.1.0
+info:
+  title: Agent Registry Service
+  version: 1.0.0
+  description: Agent registration, versioning, capability discovery, health monitoring
+servers:
+  - url: /api/v1
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /ready:
+    get:
+      operationId: readinessCheck
+      summary: Readiness check
+      responses:
+        "200":
+          description: Ready
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /agents:
+    get:
+      operationId: listRegisteredAgents
+      summary: List all registered agents
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: domain
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, deprecated, experimental, disabled]
+      responses:
+        "200":
+          description: Agent list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RegisteredAgent"
+    post:
+      operationId: registerAgent
+      summary: Register a new agent
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentRegistration"
+      responses:
+        "201":
+          description: Agent registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisteredAgent"
+        "409":
+          description: Agent already registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /agents/{agent_type}:
+    get:
+      operationId: getRegisteredAgent
+      summary: Get agent details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: agent_type
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Agent details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisteredAgent"
+    put:
+      operationId: updateAgent
+      summary: Update agent registration
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: agent_type
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgentRegistration"
+      responses:
+        "200":
+          description: Agent updated
+    delete:
+      operationId: unregisterAgent
+      summary: Unregister an agent
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: agent_type
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Agent unregistered
+  /agents/{agent_type}/versions:
+    get:
+      operationId: listAgentVersions
+      summary: List agent versions
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: agent_type
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Version list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentVersion"
+  /agents/{agent_type}/health:
+    get:
+      operationId: getAgentHealth
+      summary: Get agent health status
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: agent_type
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Agent health
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AgentHealth"
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, timestamp]
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy, degraded]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+        checks:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status:
+                type: string
+                enum: [pass, fail, warn]
+              latency_ms:
+                type: number
+    ErrorResponse:
+      type: object
+      required: [error_code, message, trace_id]
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        trace_id:
+          type: string
+        details:
+          type: object
+    RegisteredAgent:
+      type: object
+      required: [agent_type, version, status]
+      properties:
+        agent_type:
+          type: string
+        version:
+          type: string
+        status:
+          type: string
+          enum: [active, deprecated, experimental, disabled]
+        description:
+          type: string
+        domains:
+          type: array
+          items:
+            type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        input_schema:
+          type: object
+        output_schema:
+          type: object
+        cost_estimate_usd:
+          type: number
+        avg_latency_ms:
+          type: number
+        registered_at:
+          type: string
+          format: date-time
+    AgentRegistration:
+      type: object
+      required: [agent_type, version, description]
+      properties:
+        agent_type:
+          type: string
+        version:
+          type: string
+        description:
+          type: string
+        domains:
+          type: array
+          items:
+            type: string
+        capabilities:
+          type: array
+          items:
+            type: string
+        input_schema:
+          type: object
+        output_schema:
+          type: object
+        required_permissions:
+          type: array
+          items:
+            type: string
+    AgentVersion:
+      type: object
+      required: [version, status]
+      properties:
+        version:
+          type: string
+        status:
+          type: string
+        release_notes:
+          type: string
+        released_at:
+          type: string
+          format: date-time
+        deprecated_at:
+          type: string
+          format: date-time
+    AgentHealth:
+      type: object
+      required: [agent_type, status]
+      properties:
+        agent_type:
+          type: string
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy, unknown]
+        last_heartbeat:
+          type: string
+          format: date-time
+        success_rate:
+          type: number
+        avg_latency_ms:
+          type: number
+        error_count_24h:
+          type: integer
+        invocation_count_24h:
+          type: integer
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key

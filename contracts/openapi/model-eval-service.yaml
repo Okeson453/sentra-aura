@@ -1,0 +1,206 @@
+openapi: 3.0.3
+info:
+  title: Model Evaluation Service
+  version: 1.0.0
+  description: Offline evaluation, safety evaluation, quality benchmarks, and drift monitoring.
+
+servers:
+  - url: http://localhost:8000
+    description: Local development
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /api/v1/evaluate/offline:
+    post:
+      summary: Run offline evaluation
+      operationId: runOfflineEvaluation
+      parameters:
+        - name: agent_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: dataset_version
+          in: query
+          schema:
+            type: string
+            default: v1
+      responses:
+        '200':
+          description: Evaluation completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OfflineEvalResult'
+        '404':
+          description: Dataset not found
+
+  /api/v1/evaluate/safety:
+    post:
+      summary: Run safety evaluation
+      operationId: runSafetyEvaluation
+      parameters:
+        - name: agent_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Safety evaluation completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SafetyResult'
+
+  /api/v1/drift/baseline:
+    post:
+      summary: Set drift baseline
+      operationId: setDriftBaseline
+      parameters:
+        - name: agent_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: number
+      responses:
+        '200':
+          description: Baseline set
+
+  /api/v1/drift/detect:
+    post:
+      summary: Detect drift
+      operationId: detectDrift
+      parameters:
+        - name: agent_id
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: number
+      responses:
+        '200':
+          description: Drift report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriftReport'
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        service:
+          type: string
+
+    OfflineEvalResult:
+      type: object
+      properties:
+        agent_id:
+          type: string
+        version:
+          type: string
+        total_cases:
+          type: integer
+        passed_cases:
+          type: integer
+        failed_cases:
+          type: integer
+        avg_score:
+          type: number
+        median_score:
+          type: number
+        p95_latency_ms:
+          type: number
+        cost_usd:
+          type: number
+        evaluated_at:
+          type: string
+          format: date-time
+
+    SafetyResult:
+      type: object
+      properties:
+        agent_id:
+          type: string
+        version:
+          type: string
+        passed:
+          type: boolean
+        score:
+          type: number
+        violations:
+          type: array
+          items:
+            type: object
+        evaluated_at:
+          type: string
+          format: date-time
+
+    DriftReport:
+      type: object
+      properties:
+        agent_id:
+          type: string
+        version:
+          type: string
+        drift_detected:
+          type: boolean
+        drift_score:
+          type: number
+        drift_type:
+          type: string
+        recommended_action:
+          type: string
+        reported_at:
+          type: string
+          format: date-time

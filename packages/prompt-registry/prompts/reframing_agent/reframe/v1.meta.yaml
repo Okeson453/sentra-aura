@@ -1,0 +1,21 @@
+version: "1.0.0"
+agent: reframing_agent
+task: reframe
+name: "Reframing Agent — reframe v1"
+description: >
+  Primary prompt template for the Reframing Agent reframe task.
+  Used in the SentraAura autonomous media pipeline.
+author: "SentraAura Platform Team"
+created_at: "2026-08-16"
+model: "gpt-4o"
+temperature: 0.3
+max_tokens: 4096
+stop_sequences: []
+tags:
+  - reframing_agent
+  - reframe
+  - batch-4
+variables:
+  - task_description
+  - context
+  - input_data

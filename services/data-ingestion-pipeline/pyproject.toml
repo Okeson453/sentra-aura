@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "data-ingestion-pipeline"
+version = "0.1.0"
+description = "SentraAura Data Ingestion Pipeline — Collectors, normalizers, NATS publishers"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.29.0",
+    "service-kit",
+    "sentinel-exceptions",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/data_ingestion_pipeline"]

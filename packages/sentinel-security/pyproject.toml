@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "sentinel-security"
+version = "0.1.0"
+description = "Shared security primitives for SentraAura"
+authors = ["SentraAura Engineering <engineering@sentraaura.com>"]
+packages = [{include = "sentinel_security", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+pyjwt = "^2.8"
+sentinel-exceptions = {path = "../sentinel-exceptions", develop = true}
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+fastapi = "^0.109"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
