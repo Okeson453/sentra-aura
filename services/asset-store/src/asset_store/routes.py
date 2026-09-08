@@ -5,10 +5,17 @@ Fixes Finding F-025.
 """
 from __future__ import annotations
 
+import json
+import os
+import shutil
+import tempfile
+from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
+import io
 
 from asset_store.models import Asset, ProvenanceRecord
 from asset_store.backend import StorageBackend, LocalStorageBackend
@@ -41,7 +48,6 @@ async def upload_asset(
     
     Note: skip_scan parameter has been removed. All uploads are scanned for viruses.
     """
-    import json
     meta = json.loads(metadata) if metadata else {}
     data = await file.read()
 
@@ -95,11 +101,6 @@ async def upload_multipart(
     Note: Uses authenticated temp directory per tenant/channel.
     Fixes Finding F-024 (predictable temp filenames).
     """
-    import json
-    import tempfile
-    import os
-    from pathlib import Path
-
     meta = json.loads(metadata) if metadata else {}
     data = await file.read()
 
@@ -138,7 +139,6 @@ async def upload_multipart(
             )
             
             # Clean up temp directory
-            import shutil
             shutil.rmtree(temp_dir, ignore_errors=True)
             
             return {
@@ -159,7 +159,6 @@ async def upload_multipart(
         }
     except Exception as e:
         # Clean up temp directory on error
-        import shutil
         shutil.rmtree(temp_dir, ignore_errors=True)
         raise
 
@@ -196,7 +195,6 @@ async def download_asset(
 ) -> Any:
     """Download asset data."""
     from fastapi.responses import StreamingResponse
-    import io
 
     asset = await service.get(asset_id)
     if not asset:
