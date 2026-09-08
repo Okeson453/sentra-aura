@@ -5,7 +5,7 @@ service-account JWTs for inter-service/agent auth.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import jwt
@@ -95,6 +95,6 @@ def create_service_token(
         "type": "service",
         "roles": roles,
         "iat": now,
-        "exp": now + timezone.timedelta(seconds=ttl_seconds),
+        "exp": now + timedelta(seconds=ttl_seconds),
     }
     return jwt.encode(payload, secret, algorithm=algorithm)
