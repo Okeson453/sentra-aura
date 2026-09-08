@@ -19,13 +19,13 @@ from clipping_engine.pipeline.highlight_scoring import score_highlights
 
 logger = logging.getLogger(__name__)
 
-config: ServiceConfig
+config = ServiceConfig()
 
 # Use database-backed store instead of in-memory
 # In production, this should use Redis or PostgreSQL via SQLAlchemy
 # For now, we'll use a simple database-backed job store
-from sqlalchemy import create_engine, Column, String, Text, Float, Integer, JSON, DateTime
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy import create_engine, Column, String, Text, Float, Integer, JSON, DateTime, text
+from sqlalchemy.orm import Session, declarative_base, sessionmaker
 from sqlalchemy.pool import QueuePool
 from datetime import datetime
 
@@ -116,7 +116,7 @@ async def readiness_check(db: Session = Depends(get_db)) -> dict[str, Any]:
     """Readiness check."""
     # Check database connectivity
     try:
-        db.execute("SELECT 1")
+        db.execute(text("SELECT 1"))
         db_healthy = True
     except Exception:
         db_healthy = False
