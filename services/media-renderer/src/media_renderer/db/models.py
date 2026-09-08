@@ -7,10 +7,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Column, String, Integer, Float, DateTime, Boolean, JSON, Text
+from sqlalchemy import Column, String, Integer, DateTime, Boolean, JSON
 from sqlalchemy.orm import relationship
 
-from media_renderer.db.base import Base, AuditMixin, TenantMixin, SoftDeleteMixin, generate_short_id
+from media_renderer.db.base import Base, AuditMixin, TenantMixin, SoftDeleteMixin
 
 
 class RenderJobORM(Base, AuditMixin, TenantMixin, SoftDeleteMixin):
@@ -27,7 +27,7 @@ class RenderJobORM(Base, AuditMixin, TenantMixin, SoftDeleteMixin):
     frame_rate = Column(Integer, nullable=False, default=30)
     started_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
-    error_message = Column(Text, nullable=True)
+    error_message = Column(String(1024), nullable=True)
     render_plan = Column(JSON, nullable=False, default={})
     timeline_clips = Column(Integer, nullable=False, default=0)
     template_id = Column(String(64), nullable=True)
@@ -49,7 +49,7 @@ class TranscodeJobORM(Base, AuditMixin, TenantMixin, SoftDeleteMixin):
     output_url = Column(String(1024), nullable=False, default="")
     started_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
-    error_message = Column(Text, nullable=True)
+    error_message = Column(String(1024), nullable=True)
 
 
 class RenderTemplateORM(Base, AuditMixin):
@@ -64,8 +64,6 @@ class RenderTemplateORM(Base, AuditMixin):
 
 
 # Conversion functions for backwards compatibility
-from media_renderer.models import RenderJob as RenderJobModel, TranscodeRequest
-
 
 def orm_to_model_render_job(orm: RenderJobORM) -> dict[str, Any]:
     """Convert RenderJobORM to dict format."""
