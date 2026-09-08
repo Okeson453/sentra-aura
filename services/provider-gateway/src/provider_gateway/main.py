@@ -7,7 +7,7 @@ import time
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from provider_gateway.config import GatewayConfig
@@ -98,7 +98,10 @@ app = FastAPI(
 )
 
 
-def _require_api_key(x_api_key: str | None = Header(None, alias="X-API-Key")) -> str:
+async def get_api_key(
+    x_api_key: str | None = Header(None, alias="X-API-Key")
+) -> str:
+    """FastAPI dependency for API key validation."""
     if not x_api_key:
         raise HTTPException(status_code=401, detail="Missing X-API-Key header")
     # In production, validate against a secrets manager or vault
@@ -128,7 +131,7 @@ async def readiness_check() -> dict[str, Any]:
 
 
 @app.post("/v1/complete")
-async def llm_complete(request: Request, api_key: str = _require_api_key) -> dict[str, Any]:
+async def llm_complete(request: Request, api_key: str = Depends(get_api_key)) -> dict[str, Any]:
     body = await request.json()
     prompt = body.get("prompt", "")
     task_type = body.get("task_type", "unknown")
@@ -204,7 +207,7 @@ async def llm_complete(request: Request, api_key: str = _require_api_key) -> dic
 
 
 @app.post("/v1/embed")
-async def embed_text(request: Request, api_key: str = _require_api_key) -> dict[str, Any]:
+async def embed_text(request: Request, api_key: str = Depends(get_api_key)) -> dict[str, Any]:
     body = await request.json()
     text = body.get("text", "")
     model = body.get("model")
@@ -230,7 +233,7 @@ async def embed_text(request: Request, api_key: str = _require_api_key) -> dict[
 
 
 @app.post("/v1/tts")
-async def text_to_speech(request: Request, api_key: str = _require_api_key) -> dict[str, Any]:
+async def text_to_speech(request: Request, api_key: str = Depends(get_api_key)) -> dict[str, Any]:
     body = await request.json()
     tts_request = {
         "text": body.get("text", ""),
@@ -251,7 +254,7 @@ async def text_to_speech(request: Request, api_key: str = _require_api_key) -> d
 
 
 @app.post("/v1/images/generate")
-async def generate_image(request: Request, api_key: str = _require_api_key) -> dict[str, Any]:
+async def generate_image(request: Request, api_key: str = Depends(get_api_key)) -> dict[str, Any]:
     body = await request.json()
     img_request = {
         "prompt": body.get("prompt", ""),
@@ -272,7 +275,7 @@ async def generate_image(request: Request, api_key: str = _require_api_key) -> d
 
 
 @app.post("/v1/video/generate")
-async def generate_video(request: Request, api_key: str = _require_api_key) -> dict[str, Any]:
+async def generate_video(request: Request, api_key: str = Depends(get_api_key)) -> dict[str, Any]:
     body = await request.json()
     vid_request = {
         "prompt": body.get("prompt", ""),
@@ -293,17 +296,17 @@ async def generate_video(request: Request, api_key: str = _require_api_key) -> d
 
 
 @app.get("/providers")
-async def list_providers(api_key: str = _require_api_key) -> list[dict[str, Any]]:
+async def list_providers(api_key: str = Depends(get_api_key)) -> list[dict[str, Any]]:
     return router.list_providers()
 
 
 @app.get("/providers/health")
-async def get_provider_health(api_key: str = _require_api_key) -> dict[str, str]:
+async def get_provider_health(api_key: str = Depends(get_api_key)) -> dict[str, str]:
     return await router.health_check_all()
 
 
 @app.get("/providers/{provider_id}/models")
-async def list_provider_models(provider_id: str, api_key: str = _require_api_key) -> list[dict[str, Any]]:
+async def list_provider_models(provider_id: str, api_key: str = Depends(get_api_key)) -> list[dict[str, Any]]:
     try:
         return router.list_models(provider_id)
     except ValueError as exc:
@@ -313,7 +316,7 @@ async def list_provider_models(provider_id: str, api_key: str = _require_api_key
 @app.get("/cost/usage")
 async def get_usage_report(
     request: Request,
-    api_key: str = _require_api_key,
+    api_key: str = Depends(get_api_key),
 ) -> dict[str, Any]:
     from_timestamp = request.query_params.get("from")
     to_timestamp = request.query_params.get("to")
