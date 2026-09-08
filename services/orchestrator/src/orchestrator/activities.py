@@ -22,6 +22,7 @@ SERVICES = {
     "analytics-ingestion": "http://analytics-ingestion:8000",
     "media-renderer": "http://media-renderer:8000",
     "provider-gateway": "http://provider-gateway:8000",
+    "policy-engine": "http://policy-engine:8000",
 }
 
 async def _call_service(service_name: str, endpoint: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -78,7 +79,7 @@ async def research_topic(channel_id: str, topic: str) -> dict[str, Any]:
         "topic": topic,
     }
     try:
-        result = await _call_service("research-service", "/v1/research", payload)
+        result = await _call_service("research-service", "/research", payload)
         return {
             "channel_id": channel_id,
             "topic": topic,
@@ -267,7 +268,7 @@ async def publish_content(channel_id: str, video_id: str, clips: dict[str, Any],
                 "tags": ["clip", "short"],
             }
             try:
-                clip_result = await _call_service("/publications", clip_pub)
+                clip_result = await _call_service("publishing-service", "/publications", clip_pub)
                 clip_results.append(clip_result)
             except Exception as e:
                 logger.warning(f"Failed to publish clip {candidate.get('clip_id')}: {e}")
