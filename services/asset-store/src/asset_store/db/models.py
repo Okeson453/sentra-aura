@@ -8,7 +8,6 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import Column, String, BigInteger, Text, DateTime, Boolean, JSON
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import relationship
 
 from asset_store.db.base import Base, AuditMixin, TenantMixin, SoftDeleteMixin
@@ -54,40 +53,38 @@ class ProvenanceRecordORM(Base, AuditMixin, TenantMixin):
     asset = relationship("AssetORM", back_populates="provenance_records")
 
 
-# Backwards compatibility: convert ORM instances to dataclass format
-from asset_store.models import Asset as AssetDataClass, ProvenanceRecord as ProvenanceRecordDataClass
+# Conversion functions for backwards compatibility
+def orm_to_dataclass_asset(orm: AssetORM) -> dict[str, Any]:
+    """Convert AssetORM to dict format matching Asset dataclass."""
+    return {
+        "asset_id": orm.asset_id,
+        "channel_id": orm.channel_id,
+        "tenant_id": orm.tenant_id,
+        "asset_type": orm.asset_type,
+        "filename": orm.filename,
+        "content_type": orm.content_type,
+        "size_bytes": orm.size_bytes,
+        "storage_path": orm.storage_path,
+        "storage_provider": orm.storage_provider,
+        "checksum": orm.checksum,
+        "status": orm.status,
+        "provenance": {},
+        "metadata": orm.metadata or {},
+        "created_at": orm.created_at,
+        "updated_at": orm.updated_at,
+        "created_by": orm.created_by or "",
+        "updated_by": orm.updated_by or "",
+    }
 
 
-def orm_to_dataclass_asset(orm: AssetORM) -> AssetDataClass:
-    """Convert AssetORM to Asset dataclass for backwards compatibility."""
-    return AssetDataClass(
-        asset_id=orm.asset_id,
-        channel_id=orm.channel_id,
-        tenant_id=orm.tenant_id,
-        asset_type=orm.asset_type,
-        filename=orm.filename,
-        content_type=orm.content_type,
-        size_bytes=orm.size_bytes,
-        storage_path=orm.storage_path,
-        storage_provider=orm.storage_provider,
-        checksum=orm.checksum,
-        status=orm.status,
-        metadata=orm.metadata or {},
-        created_at=orm.created_at,
-        updated_at=orm.updated_at,
-        created_by=orm.created_by or "",
-        updated_by=orm.updated_by or "",
-    )
-
-
-def orm_to_dataclass_provenance(orm: ProvenanceRecordORM) -> ProvenanceRecordDataClass:
-    """Convert ProvenanceRecordORM to ProvenanceRecord dataclass for backwards compatibility."""
-    return ProvenanceRecordDataClass(
-        record_id=orm.record_id,
-        asset_id=orm.asset_id,
-        action=orm.action,
-        agent_id=orm.agent_id,
-        source_asset_ids=orm.source_asset_ids or [],
-        metadata=orm.metadata or {},
-        created_at=orm.created_at,
-    )
+def orm_to_dataclass_provenance(orm: ProvenanceRecordORM) -> dict[str, Any]:
+    """Convert ProvenanceRecordORM to dict format matching ProvenanceRecord dataclass."""
+    return {
+        "record_id": orm.record_id,
+        "asset_id": orm.asset_id,
+        "action": orm.action,
+        "agent_id": orm.agent_id,
+        "source_asset_ids": orm.source_asset_ids or [],
+        "metadata": orm.metadata or {},
+        "created_at": orm.created_at,
+    }
