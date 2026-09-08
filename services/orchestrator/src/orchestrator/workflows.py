@@ -11,7 +11,7 @@ from temporalio import workflow
 from temporalio.common import RetryPolicy
 
 with workflow.unsafe.imports_passed_through():
-    from orchestrator.state_machine import WorkflowExecution, WorkflowState, TaskState
+    from orchestrator.state_machine import WorkflowExecution, WorkflowState, TaskState, TaskNode
     from orchestrator.scheduler import DAGScheduler
 
 
