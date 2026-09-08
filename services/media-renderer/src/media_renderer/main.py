@@ -1,6 +1,7 @@
 """Media Renderer FastAPI service entrypoint.
 
-GPU-accelerated video composition, rendering pipeline, format transcoding
+GPU-accelerated video composition, rendering pipeline, format transcoding.
+Updated to use database-backed storage and fix job lookup bug.
 """
 from __future__ import annotations
 
@@ -14,13 +15,15 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from media_renderer.config import ServiceConfig
+from media_renderer.service import MediaRendererService
+from media_renderer.db.session import get_db, init_db
 
 logger = logging.getLogger(__name__)
 
 config: ServiceConfig
 
-# In-memory store (replace with Redis/DB in production)
-_store: dict[str, dict[str, Any]] = {}
+# Initialize database
+init_db()
 
 
 @asynccontextmanager
@@ -51,7 +54,6 @@ async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse
     return JSONResponse(status_code=400, content={"error_code": "VALIDATION_ERROR", "message": str(exc)})
 
 
-
 @app.get("/health")
 async def health_check() -> dict[str, Any]:
     """Health check."""
@@ -64,14 +66,32 @@ async def health_check() -> dict[str, Any]:
 
 @app.get("/ready")
 async def readiness_check() -> dict[str, Any]:
-    """Readiness check."""
+    """Readiness check.
+    
+    Validates database connectivity and returns actual checks.
+    """
+    from sqlalchemy import text
+    from sqlalchemy.orm import Session
+    
+    checks = {}
+    status = "healthy"
+    
+    # Check database connectivity
+    try:
+        db = next(get_db())
+        db.execute(text("SELECT 1"))
+        db.close()
+        checks["database"] = {"status": "ok", "message": "Database connection successful"}
+    except Exception as e:
+        checks["database"] = {"status": "error", "message": str(e)}
+        status = "degraded"
+    
     return {
-        "status": "healthy",
+        "status": status,
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "version": config.version,
-        "checks": {},
+        "checks": checks,
     }
-
 
 
 @app.post("/render")
@@ -82,41 +102,52 @@ async def submit_render_job(request: Request, authorization: str = Depends(_requ
     timeline = body.get("timeline") or []
     plan = {}
     try:
-        from media_renderer.service import MediaRendererService
         svc = MediaRendererService()
         plan = svc.build_render_plan({"clips": timeline, "timeline": timeline, "format": body.get("format") or "mp4"})
     except Exception as exc:
         plan = {"error": str(exc), "timeline_clips": len(timeline) if isinstance(timeline, list) else 0}
-    job = {
-        "job_id": job_id,
-        "status": "queued",
-        "project_id": body.get("project_id", ""),
-        "channel_id": body.get("channel_id", ""),
-        "progress_percent": 0,
-        "output_url": "",
-        "output_format": body.get("format") or "mp4",
-        "timeline_clips": len(timeline) if isinstance(timeline, list) else 0,
-        "render_plan": plan,
-        "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-    }
-    _store[job_id] = job
+    
+    # Create the job in database via service
+    from media_renderer.models import RenderRequest
+    render_request = RenderRequest(
+        project_id=body.get("project_id", ""),
+        channel_id=body.get("channel_id", ""),
+        tenant_id=body.get("tenant_id", ""),
+        output_format=body.get("format") or "mp4",
+        resolution=body.get("resolution", "1080p"),
+        frame_rate=body.get("frame_rate", 30),
+        template_id=body.get("template_id"),
+        callback_url=body.get("callback_url"),
+    )
+    job = await svc.create_render_job(render_request)
+    
+    # Update with plan
+    job["render_plan"] = plan
+    job["timeline_clips"] = len(timeline) if isinstance(timeline, list) else 0
+    
     return job
 
 
 @app.get("/render/jobs/{job_id}")
 async def get_render_job(job_id: str, authorization: str = Depends(_require_bearer)) -> dict[str, Any]:
-    """Get render job status."""
-    item = _store.get("get_render_job_" + job_id)
-    if not item:
+    """Get render job status.
+    
+    Fixed: Now looks up job by job_id directly (not "get_render_job_" + job_id).
+    """
+    svc = MediaRendererService()
+    job = await svc.get_render_job(job_id)
+    if not job:
         raise HTTPException(status_code=404, detail="job_id not found")
-    return item
+    return job
 
 
 @app.post("/render/jobs/{job_id}/cancel")
 async def cancel_render_job(request: Request, authorization: str = Depends(_require_bearer)) -> dict[str, Any]:
     """Cancel a render job."""
     body = await request.json()
-    return {"status": "ok", "mock": True}
+    svc = MediaRendererService()
+    result = await svc.cancel_job(job_id)
+    return {"status": "ok", **result}
 
 
 @app.get("/render/jobs")
@@ -128,57 +159,31 @@ async def list_render_jobs(
     authorization: str = Depends(_require_bearer),
 ) -> dict[str, Any]:
     """List render jobs."""
-    items = [v for v in _store.values() if v.get("status")]
-    if channel_id:
-        items = [i for i in items if i.get("channel_id") == channel_id]
-    if status:
-        items = [i for i in items if i.get("status") == status]
-    total = len(items)
-    start = (page - 1) * page_size
-    end = start + page_size
-    return {
-        "items": items[start:end],
-        "pagination": {
-            "page": page,
-            "page_size": page_size,
-            "total": total,
-            "total_pages": (total + page_size - 1) // page_size,
-        },
-    }
+    svc = MediaRendererService()
+    return await svc.list_jobs(channel_id, status, page, page_size)
 
 
 @app.post("/transcode")
 async def submit_transcode_job(request: Request, authorization: str = Depends(_require_bearer)) -> dict[str, Any]:
     """Submit a transcode job."""
     body = await request.json()
-    job_id = f"transcode-{uuid.uuid4().hex[:12]}"
-    job = {
-        "job_id": job_id,
-        "status": "queued",
-        "source_asset_id": body.get("source_asset_id", ""),
-        "target_format": body.get("target_format", "mp4"),
-        "progress_percent": 0,
-        "output_url": "",
-        "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        "completed_at": None,
-    }
-    _store[job_id] = job
-    return job
+    from media_renderer.models import TranscodeRequest
+    transcode_request = TranscodeRequest(
+        source_asset_id=body.get("source_asset_id", ""),
+        target_format=body.get("target_format", "mp4"),
+        target_resolution=body.get("target_resolution", "1080p"),
+        target_codec=body.get("target_codec", "h264"),
+        bitrate_kbps=body.get("bitrate_kbps"),
+    )
+    svc = MediaRendererService()
+    return await svc.create_transcode_job(transcode_request)
 
 
 @app.get("/templates")
 async def list_templates(authorization: str = Depends(_require_bearer)) -> list[dict[str, Any]]:
     """List available render templates."""
-    return [
-        {
-            "template_id": "standard_1080p",
-            "name": "Standard 1080p",
-            "description": "Default 1080p render template",
-            "compatible_formats": ["mp4", "mov"],
-            "default_settings": {"resolution": "1080p", "frame_rate": 30},
-        },
-    ]
-
+    svc = MediaRendererService()
+    return await svc.list_templates()
 
 
 if __name__ == "__main__":
