@@ -6,14 +6,13 @@ Replaces in-memory dict storage with PostgreSQL.
 from __future__ import annotations
 
 import hashlib
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy.orm import Session
 
-from asset_store.db.models import AssetORM, ProvenanceRecordORM
-from asset_store.db.session import get_db
-from asset_store.models import Asset, ProvenanceRecord
 from asset_store.backend import StorageBackend
+from asset_store.db.session import get_db
 
 
 class DatabaseMetadataBackend:
@@ -37,10 +36,9 @@ class DatabaseMetadataBackend:
         metadata: dict[str, Any] | None = None,
         created_by: str = "",
         skip_scan: bool = False,
-    ) -> Asset:
+    ) -> Any:
         """Upload an asset with database metadata storage."""
         import uuid
-        from datetime import datetime
 
         # Generate asset ID
         asset_id = str(uuid.uuid4())[:32]
@@ -51,6 +49,9 @@ class DatabaseMetadataBackend:
         
         # Calculate checksum
         checksum = hashlib.sha256(data).hexdigest()
+        
+        # Import here to avoid circular imports
+        from asset_store.db.models import AssetORM, orm_to_dataclass_asset
         
         # Create and store the asset metadata in the database
         db = next(get_db())
@@ -76,13 +77,14 @@ class DatabaseMetadataBackend:
             db.refresh(orm_asset)
             
             # Convert to dataclass for backwards compatibility
-            from asset_store.db.models import orm_to_dataclass_asset
             return orm_to_dataclass_asset(orm_asset)
         finally:
             db.close()
 
-    async def get(self, asset_id: str) -> Asset | None:
+    async def get(self, asset_id: str) -> Any:
         """Get an asset by ID from database."""
+        from asset_store.db.models import AssetORM, orm_to_dataclass_asset
+        
         db = next(get_db())
         try:
             orm_asset = db.query(AssetORM).filter(
@@ -90,7 +92,6 @@ class DatabaseMetadataBackend:
                 AssetORM.is_deleted == False
             ).first()
             if orm_asset:
-                from asset_store.db.models import orm_to_dataclass_asset
                 return orm_to_dataclass_asset(orm_asset)
             return None
         finally:
@@ -105,6 +106,8 @@ class DatabaseMetadataBackend:
 
     async def delete(self, asset_id: str) -> bool:
         """Soft-delete an asset in database."""
+        from asset_store.db.models import AssetORM
+        
         db = next(get_db())
         try:
             orm_asset = db.query(AssetORM).filter(
@@ -128,11 +131,11 @@ class DatabaseMetadataBackend:
         agent_id: str,
         source_asset_ids: list[str] | None = None,
         metadata: dict[str, Any] | None = None,
-    ) -> ProvenanceRecord:
+    ) -> Any:
         """Add a provenance record to database."""
         import uuid
-        from datetime import datetime
-
+        from asset_store.db.models import ProvenanceRecordORM, orm_to_dataclass_provenance
+        
         db = next(get_db())
         try:
             orm_record = ProvenanceRecordORM(
@@ -151,19 +154,19 @@ class DatabaseMetadataBackend:
             db.commit()
             db.refresh(orm_record)
             
-            from asset_store.db.models import orm_to_dataclass_provenance
             return orm_to_dataclass_provenance(orm_record)
         finally:
             db.close()
 
-    async def get_provenance(self, asset_id: str) -> list[ProvenanceRecord]:
+    async def get_provenance(self, asset_id: str) -> list[Any]:
         """Get provenance records for an asset from database."""
+        from asset_store.db.models import ProvenanceRecordORM, orm_to_dataclass_provenance
+        
         db = next(get_db())
         try:
             orm_records = db.query(ProvenanceRecordORM).filter(
                 ProvenanceRecordORM.asset_id == asset_id
             ).all()
-            from asset_store.db.models import orm_to_dataclass_provenance
             return [orm_to_dataclass_provenance(r) for r in orm_records]
         finally:
             db.close()
@@ -172,8 +175,10 @@ class DatabaseMetadataBackend:
         self,
         channel_id: str | None = None,
         asset_type: str | None = None,
-    ) -> list[Asset]:
+    ) -> list[Any]:
         """List assets from database with optional filters."""
+        from asset_store.db.models import AssetORM, orm_to_dataclass_asset
+        
         db = next(get_db())
         try:
             query = db.query(AssetORM).filter(AssetORM.is_deleted == False)
@@ -183,7 +188,6 @@ class DatabaseMetadataBackend:
                 query = query.filter(AssetORM.asset_type == asset_type)
             
             orm_assets = query.all()
-            from asset_store.db.models import orm_to_dataclass_asset
             return [orm_to_dataclass_asset(a) for a in orm_assets]
         finally:
             db.close()
