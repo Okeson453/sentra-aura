@@ -1,6 +1,7 @@
 """Temporal workflows for SentraAura.
 
 Matches Architecture §4.1, §5.1.
+Implements the complete autonomous loop: Discover -> Create -> Produce -> Clip -> Publish -> Measure -> Learn -> Optimize
 """
 from __future__ import annotations
 
@@ -80,58 +81,125 @@ class AgentWorkflow:
 
 @workflow.defn
 class LongFormVideoWorkflow:
-    """Workflow for long-form video production."""
+    """Workflow for complete long-form video production and autonomous loop.
+    
+    Implements: Discover -> Create -> Produce -> Clip -> Publish -> Measure -> Learn -> Optimize
+    Matches Architecture §1 Core Operating Loop.
+    """
 
     @workflow.run
     async def run(self, params: dict[str, Any]) -> dict[str, Any]:
         channel_id = params["channel_id"]
         topic = params["topic"]
+        workflow_id = params.get("workflow_id", workflow.uuid_of(self.run_id))
 
-        # Step 1: Research
+        results: dict[str, Any] = {
+            "channel_id": channel_id,
+            "topic": topic,
+            "workflow_id": workflow_id,
+        }
+
+        # Step 1: Research (Discover)
         research = await workflow.execute_activity(
             "research_topic",
             args=(channel_id, topic),
             start_to_close_timeout=timedelta(minutes=15),
             retry_policy=RetryPolicy(maximum_attempts=3),
         )
+        results["research"] = research
 
-        # Step 2: Draft script
+        # Step 2: Draft script (Create)
         script = await workflow.execute_activity(
             "draft_script",
             args=(channel_id, research),
             start_to_close_timeout=timedelta(minutes=15),
             retry_policy=RetryPolicy(maximum_attempts=3),
         )
+        results["script"] = script
 
-        # Step 3: Produce voice
+        # Step 3: Produce voice (Produce)
         voice = await workflow.execute_activity(
             "produce_voice",
             args=(channel_id, script),
             start_to_close_timeout=timedelta(minutes=20),
             retry_policy=RetryPolicy(maximum_attempts=3),
         )
+        results["voice"] = voice
 
-        # Step 4: Generate visuals
+        # Step 4: Generate visuals (Produce)
         visuals = await workflow.execute_activity(
             "generate_visuals",
             args=(channel_id, script),
             start_to_close_timeout=timedelta(minutes=30),
             retry_policy=RetryPolicy(maximum_attempts=3),
         )
+        results["visuals"] = visuals
 
-        # Step 5: Render video
+        # Step 5: Render video (Produce)
         video = await workflow.execute_activity(
             "render_video",
             args=(channel_id, script, voice, visuals),
             start_to_close_timeout=timedelta(minutes=30),
             retry_policy=RetryPolicy(maximum_attempts=2),
         )
+        results["video"] = video
 
+        # Step 6: Clip generation (Clip)
+        # Use the real clipping engine instead of stub
+        clips = await workflow.execute_activity(
+            "generate_clips",
+            args=(channel_id, video.get("video_id"), script),
+            start_to_close_timeout=timedelta(minutes=45),
+            retry_policy=RetryPolicy(maximum_attempts=2),
+        )
+        results["clips"] = clips
+
+        # Step 7: Package and publish (Publish)
+        publish_result = await workflow.execute_activity(
+            "publish_content",
+            args=(channel_id, video.get("video_id"), clips, script),
+            start_to_close_timeout=timedelta(minutes=30),
+            retry_policy=RetryPolicy(maximum_attempts=2),
+        )
+        results["publish"] = publish_result
+
+        # Step 8: Record analytics (Measure)
+        analytics_result = await workflow.execute_activity(
+            "record_analytics",
+            args=(channel_id, video.get("video_id"), publish_result, clips),
+            start_to_close_timeout=timedelta(minutes=10),
+            retry_policy=RetryPolicy(maximum_attempts=2),
+        )
+        results["analytics"] = analytics_result
+
+        # Step 9: Update learning models (Learn)
+        learning_result = await workflow.execute_activity(
+            "update_learning",
+            args=(channel_id, video.get("video_id"), analytics_result, clips),
+            start_to_close_timeout=timedelta(minutes=15),
+            retry_policy=RetryPolicy(maximum_attempts=2),
+        )
+        results["learning"] = learning_result
+
+        # Step 10: Optimize policy (Optimize)
+        optimize_result = await workflow.execute_activity(
+            "optimize_policy",
+            args=(channel_id, learning_result, analytics_result),
+            start_to_close_timeout=timedelta(minutes=10),
+            retry_policy=RetryPolicy(maximum_attempts=2),
+        )
+        results["optimize"] = optimize_result
+
+        # Complete the autonomous loop
         return {
+            **results,
             "channel_id": channel_id,
             "topic": topic,
             "video_id": video.get("video_id"),
+            "clip_count": len(clips.get("candidates", [])),
+            "published": publish_result.get("status") == "published",
             "status": "COMPLETED",
+            "loop_complete": True,
         }
 
 
