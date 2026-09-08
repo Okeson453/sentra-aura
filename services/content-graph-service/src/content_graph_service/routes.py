@@ -6,7 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from content_graph_service.models import get_engine, get_sessionmaker, Base
+from content_graph_service.models import get_engine, get_sessionmaker, Base, ContentNode, ContentEdge, LineageRecord
 from content_graph_service.repositories import NodeRepository, EdgeRepository, LineageRepository
 from content_graph_service.graph_queries import GraphTraversal
 from content_graph_service.schemas import (
@@ -16,13 +16,12 @@ from content_graph_service.schemas import (
     TraversalRequest, TraversalResponse,
     ProvenanceChainResponse,
 )
+from content_graph_service.config import get_settings
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-
-_engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
-_sessionmaker = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
+# Use configured database URL instead of hardcoded :memory:
+settings = get_settings()
+_engine = get_engine(settings.database_url)
+_sessionmaker = get_sessionmaker(_engine)
 Base.metadata.create_all(bind=_engine)
 
 def get_db():
