@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import APIRouter
 
-from policy_engine.models import AutonomyLevel, PolicyEvaluation
+from policy_engine.models import AutonomyLevel, PolicyEvaluation, PolicyRule
 from policy_engine.engine import PolicyEngine
 from policy_engine.store import PolicyStore
 
@@ -46,7 +46,8 @@ async def create_policy(data: dict[str, Any]) -> dict[str, Any]:
     """Create a policy rule."""
     rule = PolicyRule(
         rule_id=data["rule_id"],
-        policy_type=data["policy_type"],
+        name=data.get("name", ""),
+        policy_type=data.get("policy_type", "content"),
         autonomy_level=AutonomyLevel(data.get("autonomy_level", "L1")),
         condition=data.get("condition", {}),
         action=data.get("action", "ALLOW"),
