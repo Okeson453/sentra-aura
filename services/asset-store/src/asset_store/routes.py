@@ -1,4 +1,8 @@
-"""Routes for the Asset Store service."""
+"""Routes for the Asset Store service.
+
+Updated to use database-backed storage and remove skip_scan parameter.
+Fixes Finding F-025.
+"""
 from __future__ import annotations
 
 from typing import Any
@@ -8,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from asset_store.models import Asset, ProvenanceRecord
 from asset_store.backend import StorageBackend, LocalStorageBackend
+from asset_store.db_backend import DatabaseMetadataBackend
 from asset_store.service import AssetStoreService
 from asset_store.virus_scanner import ClamAVScanner, SignatureScanner
 
@@ -15,7 +20,10 @@ router = APIRouter()
 
 
 def get_service() -> AssetStoreService:
-    return AssetStoreService(backend=LocalStorageBackend(), scanner=SignatureScanner())
+    # Use database backend by default
+    backend = LocalStorageBackend()
+    metadata_backend = DatabaseMetadataBackend(backend)
+    return AssetStoreService(backend=backend, scanner=SignatureScanner(), metadata_backend=metadata_backend)
 
 
 @router.post("/upload", response_model=dict[str, Any], status_code=status.HTTP_201_CREATED)
@@ -27,10 +35,12 @@ async def upload_asset(
     content_type: str | None = Form(default=None),
     metadata: str = Form(default="{}"),
     created_by: str = Form(default=""),
-    skip_scan: bool = Form(default=False),
     service: AssetStoreService = Depends(get_service),
 ) -> dict[str, Any]:
-    """Upload an asset with optional virus scanning."""
+    """Upload an asset with mandatory virus scanning.
+    
+    Note: skip_scan parameter has been removed. All uploads are scanned for viruses.
+    """
     import json
     meta = json.loads(metadata) if metadata else {}
     data = await file.read()
@@ -45,7 +55,7 @@ async def upload_asset(
             content_type=content_type or (file.content_type or "application/octet-stream"),
             metadata=meta,
             created_by=created_by,
-            skip_scan=skip_scan,
+            skip_scan=False,  # Always scan - cannot be bypassed
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
@@ -80,61 +90,78 @@ async def upload_multipart(
     created_by: str = Form(default=""),
     service: AssetStoreService = Depends(get_service),
 ) -> dict[str, Any]:
-    """Upload a part of a multipart upload."""
+    """Upload a part of a multipart upload.
+    
+    Note: Uses authenticated temp directory per tenant/channel.
+    Fixes Finding F-024 (predictable temp filenames).
+    """
     import json
     import tempfile
     import os
+    from pathlib import Path
 
     meta = json.loads(metadata) if metadata else {}
     data = await file.read()
 
-    # Store part temporarily
-    temp_dir = tempfile.gettempdir()
+    # Use authenticated temp directory
+    # This fixes Finding F-024 (multipart temp handling)
+    temp_dir = tempfile.mkdtemp(prefix=f"sentra-aura-multipart-{tenant_id}-{channel_id}-")
     part_path = os.path.join(temp_dir, f"{upload_id}_part_{part_number}")
-    with open(part_path, "wb") as f:
-        f.write(data)
+    
+    try:
+        with open(part_path, "wb") as f:
+            f.write(data)
 
-    # Check if all parts received
-    received_parts = sum(
-        1 for i in range(1, total_parts + 1)
-        if os.path.exists(os.path.join(temp_dir, f"{upload_id}_part_{i}"))
-    )
-
-    if received_parts == total_parts:
-        # Assemble complete file
-        complete_data = bytearray()
-        for i in range(1, total_parts + 1):
-            p = os.path.join(temp_dir, f"{upload_id}_part_{i}")
-            with open(p, "rb") as f:
-                complete_data.extend(f.read())
-            os.remove(p)
-
-        asset = await service.upload(
-            channel_id=channel_id,
-            tenant_id=tenant_id,
-            asset_type=asset_type,
-            filename=file.filename or f"{upload_id}.bin",
-            data=bytes(complete_data),
-            content_type=content_type or (file.content_type or "application/octet-stream"),
-            metadata={**meta, "multipart": True, "total_parts": total_parts},
-            created_by=created_by,
+        # Check if all parts received
+        received_parts = sum(
+            1 for i in range(1, total_parts + 1)
+            if os.path.exists(os.path.join(temp_dir, f"{upload_id}_part_{i}"))
         )
+
+        if received_parts == total_parts:
+            # Assemble complete file
+            complete_data = bytearray()
+            for i in range(1, total_parts + 1):
+                p = os.path.join(temp_dir, f"{upload_id}_part_{i}")
+                with open(p, "rb") as f:
+                    complete_data.extend(f.read())
+
+            asset = await service.upload(
+                channel_id=channel_id,
+                tenant_id=tenant_id,
+                asset_type=asset_type,
+                filename=file.filename or f"{upload_id}.bin",
+                data=bytes(complete_data),
+                content_type=content_type or (file.content_type or "application/octet-stream"),
+                metadata={**meta, "multipart": True, "total_parts": total_parts},
+                created_by=created_by,
+            )
+            
+            # Clean up temp directory
+            import shutil
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            
+            return {
+                "asset_id": asset.asset_id,
+                "status": "completed",
+                "upload_id": upload_id,
+                "parts_received": received_parts,
+                "total_parts": total_parts,
+                "size_bytes": asset.size_bytes,
+            }
+
         return {
-            "asset_id": asset.asset_id,
-            "status": "completed",
+            "status": "pending",
             "upload_id": upload_id,
+            "part_number": part_number,
             "parts_received": received_parts,
             "total_parts": total_parts,
-            "size_bytes": asset.size_bytes,
         }
-
-    return {
-        "status": "pending",
-        "upload_id": upload_id,
-        "part_number": part_number,
-        "parts_received": received_parts,
-        "total_parts": total_parts,
-    }
+    except Exception as e:
+        # Clean up temp directory on error
+        import shutil
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        raise
 
 
 @router.get("/{asset_id}", response_model=dict[str, Any])
