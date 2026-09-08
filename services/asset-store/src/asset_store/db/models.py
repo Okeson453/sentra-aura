@@ -7,7 +7,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Column, String, BigInteger, Text, DateTime, Boolean, JSON
+from sqlalchemy import Column, String, BigInteger, DateTime, Boolean, JSON
 from sqlalchemy.orm import relationship
 
 from asset_store.db.base import Base, AuditMixin, TenantMixin, SoftDeleteMixin
