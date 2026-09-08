@@ -5,6 +5,7 @@ service-account JWTs for inter-service/agent auth.
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 import jwt
@@ -42,8 +43,17 @@ def authenticate_request(
     """Validate a JWT and return an AuthContext.
 
     Raises AuthenticationError on any validation failure.
+    Fails closed: if no jwt_secret is provided, signature verification is required.
     """
     algorithms = jwt_algorithms or ["RS256", "HS256"]
+    
+    # Fail closed: if no secret provided for HS256, require RS256 or fail
+    if jwt_secret is None and "HS256" in algorithms:
+        # Remove HS256 from allowed algorithms if no secret
+        algorithms = [a for a in algorithms if a != "HS256"]
+        if not algorithms:
+            raise AuthenticationError("No JWT secret provided and no valid algorithms available")
+    
     try:
         payload = jwt.decode(
             token,
@@ -51,7 +61,7 @@ def authenticate_request(
             algorithms=algorithms,
             audience=audience,
             issuer=issuer,
-            options={"verify_signature": bool(jwt_secret)},
+            options={"verify_signature": True},
         )
     except InvalidTokenError as exc:
         raise AuthenticationError(f"Invalid token: {exc}") from exc
@@ -79,11 +89,12 @@ def create_service_token(
     algorithm: str = "HS256",
 ) -> str:
     """Create a short-lived service-account JWT."""
+    now = datetime.now(timezone.utc)
     payload = {
         "sub": f"service:{service_name}",
         "type": "service",
         "roles": roles,
-        "iat": jwt.utils.datetime_to_epoch(jwt.utils.get_int_from_datetime()),
-        "exp": ttl_seconds,
+        "iat": now,
+        "exp": now + timezone.timedelta(seconds=ttl_seconds),
     }
     return jwt.encode(payload, secret, algorithm=algorithm)
