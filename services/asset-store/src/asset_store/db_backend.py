@@ -6,6 +6,7 @@ Replaces in-memory dict storage with PostgreSQL.
 from __future__ import annotations
 
 import hashlib
+import uuid
 from datetime import datetime
 from typing import Any
 
@@ -38,8 +39,6 @@ class DatabaseMetadataBackend:
         skip_scan: bool = False,
     ) -> Any:
         """Upload an asset with database metadata storage."""
-        import uuid
-
         # Generate asset ID
         asset_id = str(uuid.uuid4())[:32]
         
@@ -133,7 +132,6 @@ class DatabaseMetadataBackend:
         metadata: dict[str, Any] | None = None,
     ) -> Any:
         """Add a provenance record to database."""
-        import uuid
         from asset_store.db.models import ProvenanceRecordORM, orm_to_dataclass_provenance
         
         db = next(get_db())
