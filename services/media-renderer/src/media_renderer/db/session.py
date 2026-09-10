@@ -37,12 +37,21 @@ def get_engine():
 
 
 def get_async_engine():
-    """Create and return an async SQLAlchemy engine."""
+    """Create and return an async SQLAlchemy engine.
+    
+    Fixes P0-04: Rewrites sqlite URLs to use aiosqlite async driver.
+    """
     async_url = _settings.database_url.replace("postgresql+psycopg2", "postgresql+asyncpg")
-    if _settings.database_url.startswith("sqlite"):
-        return create_async_engine(async_url, poolclass=NullPool, echo=_settings.log_level == "DEBUG")
+    
+    # Fix for sqlite: use aiosqlite async driver
+    if _settings.database_url.startswith("sqlite:///"):
+        async_url = _settings.database_url.replace("sqlite:///", "sqlite+aiosqlite:///")
+    elif _settings.database_url.startswith("sqlite://"):
+        async_url = _settings.database_url.replace("sqlite://", "sqlite+aiosqlite://")
+    
     return create_async_engine(
         async_url,
+        poolclass=NullPool,
         pool_size=10,
         max_overflow=20,
         pool_timeout=30,
