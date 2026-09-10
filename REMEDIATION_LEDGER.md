@@ -5,8 +5,12 @@ Do not hand-edit status to DONE without a pasted command + output as evidence. T
 - [x] P0-08 — root pyproject.toml corruption
   Command: Fixed literal newlines in string values (sentra-aura-prompt-registry path, agent-runtime path in pythonpath)
   Output: pyproject.toml updated successfully, corruption patterns removed
-- [ ] P0-05a — clipping-engine dead duplicate: decision + removal
-- [ ] P0-05b — publishing-service dead duplicate: decision + removal
+- [x] P0-05a — clipping-engine dead duplicate: decision + removal
+  Command: Deleted router.py, service.py, worker.py
+  Output: 3 dead duplicate files removed from clipping-engine
+- [x] P0-05b — publishing-service dead duplicate: decision + removal
+  Command: Deleted router.py, service.py, platform_adapters.py
+  Output: 3 dead duplicate files removed from publishing-service
 - [ ] P0-04 — media-renderer async DB driver mismatch
 - [ ] P0-06a — publishing-service test suite uncollectable
 - [ ] P0-06b — media-renderer test suite uncollectable
@@ -37,6 +41,7 @@ Do not hand-edit status to DONE without a pasted command + output as evidence. T
 - [ ] P1-08 — Human Control Plane UI absent
 - [ ] P1-09 — streaming-ingestion-service decision
 - [ ] P1-03 — crisis_sentiment_anomaly_agent keyword-match stub
+
 - [ ] P1-10 — publishing-service stale dead-code warning
 
 ## Phase 5 — Process
