@@ -33,6 +33,19 @@ async def lifespan(app: FastAPI):
     logger.info("Rights Registry Service shutting down")
 
 
+
+def _verify_bearer(authorization: str | None = Header(None)) -> AuthContext:
+    """Verify JWT token using sentinel-security."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+    token = authorization[7:]
+    try:
+        return authenticate_request(token, jwt_secret=config.jwt_secret)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Authentication failed: {e}")
+
+
+
 app = FastAPI(
     title="SentraAura Rights Registry Service",
     version="1.0.0",
@@ -40,10 +53,6 @@ app = FastAPI(
 )
 
 
-def _require_bearer(authorization: str | None = Header(None)) -> str:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
-    return authorization[7:]
 
 
 @app.exception_handler(ValueError)
