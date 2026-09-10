@@ -52,7 +52,8 @@ class ClipJob(Base):
     completed_at = Column(DateTime)
     error_message = Column(Text)
 
-class RenderJob(Base):
+class R
+enderJob(Base):
     __tablename__ = "render_jobs"
     job_id = Column(String(36), primary_key=True)
     clip_id = Column(String(255))
@@ -116,6 +117,7 @@ async def health_check() -> dict[str, Any]:
         "status": "healthy",
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "version": config.version,
+
     }
 
 
@@ -170,7 +172,8 @@ async def detect_clips(request: Request, authorization: str = Depends(_require_b
             "visual_change": float(s.get("visual_change") or 0.0),
         })
     
-    # Use real scoring from highlight_scoring module
+    # Use real scoring from highlight_sco
+ring module
     scored = score_highlights(norm)
     candidates = scored.get("scored_segments") or scored.get("candidates") or []
     
@@ -231,7 +234,8 @@ async def get_clip_job_status(job_id: str, authorization: str = Depends(_require
 
 
 @app.get("/clips/jobs/{job_id}/results")
-async def get_clip_job_results(job_id: str, authorization: str = Depends(_require_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
+async def get_clip_job
+_results(job_id: str, authorization: str = Depends(_require_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
     """Get clip detection results."""
     job = db.query(ClipJob).filter(ClipJob.job_id == job_id).first()
     if not job:
@@ -280,7 +284,8 @@ async def render_clip(clip_id: str, request: Request, authorization: str = Depen
     """Render a clip to final output.
     
     In production, this should call the media-renderer service.
-    For now, we create a job that will be processed asynchronously.
+    For now, we create a job that will be 
+processed asynchronously.
     """
     body = await request.json()
     job_id = f"render-{uuid.uuid4().hex[:12]}"
@@ -322,17 +327,56 @@ async def _process_render_job(db: Session, job_id: str, clip_id: str, body: dict
     In production, this would call the actual media-renderer service.
     """
     try:
-        # Simulate processing time
-        await asyncio.sleep(1)
+        # Call media-renderer service to process the render job
+        import httpx
         
-        # Update job status
-        render_job = db.query(RenderJob).filter(RenderJob.job_id == job_id).first()
-        if render_job:
-            render_job.status = "completed"
-            render_job.progress_percent = 100
-            render_job.output_url = f"https://storage.sentraaura.com/clips/{clip_id}/output.mp4"
-            render_job.completed_at = datetime.utcnow()
-            db.commit()
+        media_renderer_url = "http://media-renderer:8080/render"
+        
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                clip_job_result = db.query(ClipJob).filter(ClipJob.job_id == clip_id).first()
+                
+                edl = {"clips": [], "timeline": []}
+                
+                if clip_job_result and clip_job_result.candidates:
+                    for candidate in clip_job_result.candidates[:1]:
+                        edl["clips"].append({
+                            "asset_id": candidate.get("asset_id", ""),
+                            "start": candidate.get("start_seconds", 0),
+                            "end": candidate.get("end_seconds", 10),
+                        })
+                
+                response = await client.post(
+                    media_renderer_url,
+                    json={
+                        "project_id": body.get("project_id", ""),
+                        "channel_id": body.get("channel_id", ""),
+                        "tenant_id": body.get("tenant_id", ""),
+                        "timeline": edl["timeline"],
+                        "format": body.get("format", "mp4"),
+                        "resolution": body.get("resolution", "1080p"),
+                    },
+                    headers={"Authorization": "Bearer test-token"}
+                )
+                
+                if response.status_code == 200:
+                    render_result = response.json()
+                    render_job = db.query(RenderJob).filter(RenderJob.job_id == job_id).first()
+                    if render_job:
+                        render_job.status = "completed"
+                        render_job.progress_percent = 100
+                        render_job.output_url = render_result.get("output_url", "")
+                        render_job.completed_at = datetime.utcnow()
+                        db.commit()
+                else:
+                    raise Exception(f"Media-renderer returned {response.status_code}: {response.text}")
+        except Exception as e:
+            render_job = db.query(RenderJob).filter(RenderJob.job_id == job_id).first()
+            if render_job:
+                render_job.status = "failed"
+                render_job.error_message = str(e)
+                render_job.completed_at = datetime.utcnow()
+                db.commit()
     except Exception as e:
         render_job = db.query(RenderJob).filter(RenderJob.job_id == job_id).first()
         if render_job:
@@ -342,7 +386,8 @@ async def _process_render_job(db: Session, job_id: str, clip_id: str, body: dict
 
 
 @app.post("/clips/{clip_id}/score")
-async def score_clip(clip_id: str, request: Request, authorization: str = Depends(_require_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
+async def score_clip(clip_id: str, request: Request, authorization: 
+str = Depends(_require_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
     """Score a clip for virality/engagement potential.
     
     Uses real scoring algorithm instead of hard-coded values.
@@ -394,7 +439,8 @@ async def create_segment(request: Request, authorization: str = Depends(_require
         "end_time": body.get("end_time", 0.0),
         "label": body.get("label", ""),
         "tags": body.get("tags", []),
-        "created_at": datetime.utcnow().isoformat() + "Z",
+        "created_at"
+: datetime.utcnow().isoformat() + "Z",
     }
     return segment
 
