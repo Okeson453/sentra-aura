@@ -15,6 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from control_plane_api.config import get_settings
 from control_plane_api.db.session import get_db, get_async_db
+from sentinel_security import authenticate_request, AuthContext
+from sentinel_security.auth import AuthenticationError
 
 settings = get_settings()
 security = HTTPBearer(auto_error=False)
@@ -57,22 +59,34 @@ async def get_current_channel(request: Request) -> str:
 
 async def verify_api_key(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
-) -> str:
-    """Verify API key from Authorization header."""
+) -> AuthContext:
+    """Verify JWT from Authorization header using sentinel-security."""
     if not credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="API key required",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    # In production: validate against secrets manager
-    if credentials.credentials != settings.jwt_secret:
+    try:
+        auth_context = authenticate_request(
+            credentials.credentials,
+            jwt_secret=settings.jwt_secret,
+            jwt_algorithms=[settings.jwt_algorithm],
+        )
+        return auth_context
+    except AuthenticationError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API key",
+            detail=f"Invalid token: {exc}",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    return credentials.credentials
+
+
+async def get_auth_context(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+) -> AuthContext:
+    """Dependency to get authenticated AuthContext from JWT."""
+    return await verify_api_key(credentials)
 
 
 class RateLimiter:
