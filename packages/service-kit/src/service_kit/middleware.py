@@ -69,21 +69,31 @@ class TenantResolutionMiddleware(BaseHTTPMiddleware):
 class AuthenticationMiddleware(BaseHTTPMiddleware):
     """Extract and validate JWT, inject auth context into request state."""
 
-    def __init__(self, app: Any, *, jwt_secret: str | None = None) -> None:
+    def __init__(self, app: Any, *, jwt_secret: str | None = None, jwt_algorithm: str = "HS256") -> None:
         super().__init__(app)
         self.jwt_secret = jwt_secret
+        self.jwt_algorithm = jwt_algorithm
 
     async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+        from sentinel_security import authenticate_request, AuthContext
+        from sentinel_security.auth import AuthenticationError
+        
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
             token = auth_header[7:]
             try:
-                # In production, validate JWT properly
+                auth_context = authenticate_request(
+                    token,
+                    jwt_secret=self.jwt_secret,
+                    jwt_algorithms=[self.jwt_algorithm],
+                )
+                request.state.auth_context = auth_context
                 request.state.auth_token = token
                 request.state.authenticated = True
-            except Exception as exc:
+            except AuthenticationError as exc:
                 logger.warning(f"Auth validation failed: {exc}")
                 request.state.authenticated = False
+                request.state.auth_error = str(exc)
         else:
             request.state.authenticated = False
         return await call_next(request)
@@ -131,12 +141,12 @@ class TimingMiddleware(BaseHTTPMiddleware):
         return response
 
 
-def setup_middleware(app: Any) -> None:
+def setup_middleware(app: Any, *, jwt_secret: str | None = None, jwt_algorithm: str = "HS256") -> None:
     """Register all standard SentraAura middleware on a FastAPI app."""
     app.add_middleware(RequestIDMiddleware)
     app.add_middleware(TracingMiddleware)
     app.add_middleware(TenantResolutionMiddleware)
-    app.add_middleware(AuthenticationMiddleware)
+    app.add_middleware(AuthenticationMiddleware, jwt_secret=jwt_secret, jwt_algorithm=jwt_algorithm)
     app.add_middleware(MetricsMiddleware)
     app.add_middleware(ErrorHandlingMiddleware)
     app.add_middleware(TimingMiddleware)
