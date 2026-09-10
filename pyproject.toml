@@ -21,6 +21,7 @@ jinja2 = ">=3.1,<4"
 pydantic = ">=2.5,<3"
 pydantic-settings = ">=2.1,<3"
 sqlalchemy = {extras = ["asyncio"], version = ">=2.0,<3"}
+aiosqlite = ">=0.19,<1"
 asyncpg = ">=0.29,<1"
 alembic = ">=1.13,<2"
 redis = ">=5.0,<6"
@@ -72,6 +73,7 @@ sentinel-exceptions = {path = "packages/sentinel-exceptions", develop = true}
 sentinel-security = {path = "packages/sentinel-security", develop = true}
 observability = {path = "packages/observability", develop = true}
 service-kit = {path = "packages/service-kit"
+
 , develop = true}
 agent-contracts = {path = "packages/agent-contracts", develop = true}
 sentra-aura-prompt-registry = {path = "packages/prompt-registry", develop = true}
@@ -127,6 +129,7 @@ pythonpath = [
     "services/research-service/src",
     "services/rights-registry-service/src",
  
+
    "tools/sentra-cli/src",
     "services/agent-runtime/src/agent_runtime/agents/clipping/ai_clipping_agent/src",
     "services/agent-runtime/src/agent_runtime/agents/clipping/captioning_agent/src",
