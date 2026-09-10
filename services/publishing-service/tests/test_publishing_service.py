@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from publishing_service.main import app, _store
+from publishing_service.main import app
 
 
 client = TestClient(app)
