@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from sentinel_security.auth import authenticate_request, AuthContext
 from fastapi.responses import JSONResponse
 
 from publishing_service.config import ServiceConfig
@@ -56,7 +57,8 @@ class PublishJob(Base):
 
 # Initialize database
 _engine = create_engine(config.database_url, poolclass=QueuePool, pool_size=5, max_overflow=10)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
+SessionLocal = sessionmaker(autocommit=False, a
+utoflush=False, bind=_engine)
 Base.metadata.create_all(bind=_engine)
 
 
@@ -78,6 +80,19 @@ async def lifespan(app: FastAPI):
     logger.info("Publishing Service shutting down")
 
 
+
+def _verify_bearer(authorization: str | None = Header(None)) -> AuthContext:
+    """Verify JWT token using sentinel-security."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+    token = authorization[7:]
+    try:
+        return authenticate_request(token, jwt_secret=config.jwt_secret)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Authentication failed: {e}")
+
+
+
 app = FastAPI(
     title="SentraAura Publishing Service",
     version="1.0.0",
@@ -85,10 +100,6 @@ app = FastAPI(
 )
 
 
-def _require_bearer(authorization: str | None = Header(None)) -> str:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
-    return authorization[7:]
 
 
 @app.exception_handler(ValueError)
@@ -127,7 +138,8 @@ async def readiness_check(db: Session = Depends(get_db)) -> dict[str, Any]:
 
 
 @app.post("/publications")
-async def create_publication(request: Request, authorization: str = Depends(_require_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
+async def create_publication(request: Request, authorization: str = Depends(_requi
+re_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
     """Create a publication."""
     body = await request.json()
     publication_id = f"pub-{uuid.uuid4().hex[:12]}"
@@ -176,14 +188,15 @@ async def create_publication(request: Request, authorization: str = Depends(_req
 
 
 @app.get("/publications")
-async def list_publications(authorization: str = Depends(_require_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
+async def list_publications(authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
     """List publications."""
     publications = db.query(Publication).all()
     return {
         "publications": [
             {
                 "publication_id": p.publication_id,
-                "channel_id": p.channel_id,
+                "cha
+nnel_id": p.channel_id,
                 "title": p.title,
                 "status": p.status,
                 "created_at": p.created_at.isoformat() + "Z",
@@ -195,7 +208,7 @@ async def list_publications(authorization: str = Depends(_require_bearer), db: S
 
 
 @app.get("/publications/{publication_id}")
-async def get_publication(publication_id: str, authorization: str = Depends(_require_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
+async def get_publication(publication_id: str, authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
     """Get publication by ID."""
     pub = db.query(Publication).filter(Publication.publication_id == publication_id).first()
     if not pub:
@@ -219,7 +232,7 @@ async def get_publication(publication_id: str, authorization: str = Depends(_req
 
 
 @app.put("/publications/{publication_id}")
-async def update_publication(publication_id: str, request: Request, authorization: str = Depends(_require_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
+async def update_publication(publication_id: str, request: Request, authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
     """Update publication."""
     body = await request.json()
     pub = db.query(Publication).filter(Publication.publication_id == publication_id).first()
@@ -234,7 +247,8 @@ async def update_publication(publication_id: str, request: Request, authorizatio
         pub.status = body["status"]
     if "asset_id" in body:
         pub.asset_id = body["asset_id"]
-    if "thumbnail_asset_id" in body:
+    
+if "thumbnail_asset_id" in body:
         pub.thumbnail_asset_id = body["thumbnail_asset_id"]
     if "platforms" in body:
         pub.platforms = body["platforms"]
@@ -260,7 +274,7 @@ async def update_publication(publication_id: str, request: Request, authorizatio
 
 
 @app.delete("/publications/{publication_id}")
-async def delete_publication(publication_id: str, authorization: str = Depends(_require_bearer), db: Session = Depends(get_db)) -> None:
+async def delete_publication(publication_id: str, authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> None:
     """Delete/archive publication."""
     pub = db.query(Publication).filter(Publication.publication_id == publication_id).first()
     if not pub:
@@ -271,7 +285,7 @@ async def delete_publication(publication_id: str, authorization: str = Depends(_
 
 
 @app.post("/publications/{publication_id}/publish")
-async def publish_now(publication_id: str, request: Request, authorization: str = Depends(_require_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
+async def publish_now(publication_id: str, request: Request, authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
     """Publish immediately to configured platforms."""
     pub = db.query(Publication).filter(Publication.publication_id == publication_id).first()
     if not pub:
@@ -290,7 +304,8 @@ async def publish_now(publication_id: str, request: Request, authorization: str 
     db.add(publish_job)
     db.commit()
     
-    # Process publishing asynchronously
+    #
+ Process publishing asynchronously
     asyncio.create_task(_process_publish_job(db, job_id, publication_id, pub))
     
     return {
@@ -349,7 +364,8 @@ async def _publish_to_platform(platform_id: str, pub: Publication) -> dict[str, 
     """Publish to a specific platform.
     
     In production, this calls the actual platform adapter.
-    For now, we validate that we have the necessary configuration.
+    For now, we valida
+te that we have the necessary configuration.
     """
     if platform_id == "youtube":
         from publishing_service.platforms.youtube import YouTubeAdapter
@@ -383,7 +399,7 @@ async def _publish_to_platform(platform_id: str, pub: Publication) -> dict[str, 
 
 
 @app.post("/publications/{publication_id}/schedule")
-async def schedule_publication(publication_id: str, request: Request, authorization: str = Depends(_require_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
+async def schedule_publication(publication_id: str, request: Request, authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
     """Schedule publication."""
     body = await request.json()
     pub = db.query(Publication).filter(Publication.publication_id == publication_id).first()
@@ -395,7 +411,8 @@ async def schedule_publication(publication_id: str, request: Request, authorizat
     except (ValueError, TypeError):
         pub.scheduled_at = None
     
-    pub.status = "scheduled"
+    pub.status = "schedu
+led"
     pub.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(pub)
@@ -408,7 +425,7 @@ async def schedule_publication(publication_id: str, request: Request, authorizat
 
 
 @app.post("/publications/{publication_id}/unpublish")
-async def unpublish(publication_id: str, authorization: str = Depends(_require_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
+async def unpublish(publication_id: str, authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
     """Unpublish from platforms."""
     pub = db.query(Publication).filter(Publication.publication_id == publication_id).first()
     if not pub:
@@ -420,7 +437,7 @@ async def unpublish(publication_id: str, authorization: str = Depends(_require_b
 
 
 @app.get("/platforms")
-async def list_platforms(authorization: str = Depends(_require_bearer)) -> list[dict[str, Any]]:
+async def list_platforms(authorization: str = Depends(_verify_bearer)) -> list[dict[str, Any]]:
     """List connected publishing platforms."""
     return [
         {
