@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from sentinel_security.auth import authenticate_request, AuthContext
 from fastapi.responses import JSONResponse
 
 from research_service.config import ResearchConfig
@@ -46,6 +47,19 @@ async def lifespan(app: FastAPI):
     logger.info("Research Service shutting down")
 
 
+
+def _verify_bearer(authorization: str | None = Header(None)) -> AuthContext:
+    """Verify JWT token using sentinel-security."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+    token = authorization[7:]
+    try:
+        return authenticate_request(token, jwt_secret=config.jwt_secret)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Authentication failed: {e}")
+
+
+
 app = FastAPI(
     title="SentraAura Research Service",
     version="1.0.0",
@@ -60,7 +74,8 @@ def _require_bearer(authorization: str | None = Header(None)) -> str:
 
 
 @app.get("/health")
-async def health_check() -> dict[str, Any]:
+async def health_check() -> 
+dict[str, Any]:
     return {
         "status": "healthy",
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -87,7 +102,7 @@ async def readiness_check() -> dict[str, Any]:
 
 
 @app.post("/research")
-async def start_research(request: Request, authorization: str = Depends(_require_bearer)) -> dict[str, Any]:
+async def start_research(request: Request, authorization: str = Depends(_verify_bearer)) -> dict[str, Any]:
     body = await request.json()
     query = body.get("query", "")
     channel_id = body.get("channel_id", "")
@@ -116,7 +131,8 @@ async def start_research(request: Request, authorization: str = Depends(_require
 
 
 @app.get("/research/jobs/{job_id}")
-async def get_research_job(job_id: str, authorization: str = Depends(_require_bearer)) -> dict[str, Any]:
+async def get_research_job(job_id: str, authorization: str = Depends(_
+require_bearer)) -> dict[str, Any]:
     job = _research_jobs.get(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -124,7 +140,7 @@ async def get_research_job(job_id: str, authorization: str = Depends(_require_be
 
 
 @app.get("/research/jobs/{job_id}/results")
-async def get_research_results(job_id: str, authorization: str = Depends(_require_bearer)) -> dict[str, Any]:
+async def get_research_results(job_id: str, authorization: str = Depends(_verify_bearer)) -> dict[str, Any]:
     result = _research_results.get(job_id)
     if not result:
         raise HTTPException(status_code=404, detail="Results not found or job not completed")
@@ -132,7 +148,7 @@ async def get_research_results(job_id: str, authorization: str = Depends(_requir
 
 
 @app.post("/fact-check")
-async def fact_check(request: Request, authorization: str = Depends(_require_bearer)) -> dict[str, Any]:
+async def fact_check(request: Request, authorization: str = Depends(_verify_bearer)) -> dict[str, Any]:
     body = await request.json()
     claim_text = body.get("claim_text", "")
     context = body.get("context", "")
@@ -174,7 +190,8 @@ async def fact_check(request: Request, authorization: str = Depends(_require_bea
             confidence = 0.3
             explanation = "Low-credibility sources or conflicting information found."
 
-    return {
+ 
+   return {
         "claim_text": claim_text,
         "verdict": verdict,
         "confidence": confidence,
@@ -184,7 +201,7 @@ async def fact_check(request: Request, authorization: str = Depends(_require_bea
 
 
 @app.post("/claims/extract")
-async def extract_claims(request: Request, authorization: str = Depends(_require_bearer)) -> list[dict[str, Any]]:
+async def extract_claims(request: Request, authorization: str = Depends(_verify_bearer)) -> list[dict[str, Any]]:
     body = await request.json()
     text = body.get("text", "")
     min_confidence = body.get("min_confidence", config.claim_extraction_min_confidence)
@@ -215,7 +232,7 @@ async def extract_claims(request: Request, authorization: str = Depends(_require
 
 
 @app.post("/sources")
-async def add_source(request: Request, authorization: str = Depends(_require_bearer)) -> dict[str, Any]:
+async def add_source(request: Request, authorization: str = Depends(_verify_bearer)) -> dict[str, Any]:
     body = await request.json()
     source_id = body.get("source_id") or f"src-{uuid.uuid4().hex[:12]}"
     source = {
@@ -236,6 +253,7 @@ import asyncio
 
 async def _execute_research(
     job_id: str,
+
     query: str,
     channel_id: str,
     depth: str,
@@ -290,7 +308,8 @@ async def _execute_research(
                     "verified": c.verified,
                     "verification_status": c.verification_status,
                 }
-                for c in claims
+             
+   for c in claims
             ],
             "confidence_score": sum(r.get("credibility_score", 0) for r in ranked) / len(ranked) if ranked else 0.0,
         }
