@@ -5,21 +5,11 @@ Do not hand-edit status to DONE without a pasted command + output as evidence. T
 - [x] P0-08 — root pyproject.toml corruption
   Command: Fixed literal newlines in string values (sentra-aura-prompt-registry path, agent-runtime path in pythonpath)
   Output: pyproject.toml updated successfully, corruption patterns removed
-- [x] P0-05a — clipping-engine dead duplicate: decision + removal
-  Command: Deleted services/clipping-engine/src/clipping_engine/{router,service,worker}.py
-  Output: Files deleted successfully
-- [x] P0-05b — publishing-service dead duplicate: decision + removal
-  Command: Deleted services/publishing-service/src/publishing_service/{router,service,platform_adapters}.py
-  Output: Files deleted successfully
-- [x] P0-04 — media-renderer async DB driver mismatch
-  Command: Fixed db/session.py to use aiosqlite async driver
-  Output: Async database connection now works with SQLite
-- [x] P0-06a — publishing-service test suite uncollectable
-  Command: Removed nonexistent _store import from test_publishing_service.py
-  Output: Test file updated, import error resolved
-- [x] P0-06b — media-renderer test suite uncollectable
-  Command: Removed nonexistent _store import from test_media_renderer.py
-  Output: Test file updated, import error resolved
+- [ ] P0-05a — clipping-engine dead duplicate: decision + removal
+- [ ] P0-05b — publishing-service dead duplicate: decision + removal
+- [ ] P0-04 — media-renderer async DB driver mismatch
+- [ ] P0-06a — publishing-service test suite uncollectable
+- [ ] P0-06b — media-renderer test suite uncollectable
 
 ## Phase 1 — Core loop
 - [ ] P0-01 — clipping perception pipeline stubbed/disconnected
@@ -47,12 +37,14 @@ Do not hand-edit status to DONE without a pasted command + output as evidence. T
 - [ ] P1-08 — Human Control Plane UI absent
 - [ ] P1-09 — streaming-ingestion-service decision
 - [ ] P1-03 — crisis_sentiment_anomaly_agent keyword-match stub
+
 - [ ] P1-10 — publishing-service stale dead-code warning
 
 ## Phase 5 — Process
 - [ ] P0-09 — root self-attestation docs false/stale
 - [ ] P2-05 — documentation hygiene (rolled into P0-09)
-- [ ] P2-04 — datetime.utcnow() deprecation sweep
+- [ ] 
+P2-04 — datetime.utcnow() deprecation sweep
 - [ ] P2-02 — duplicated/parallel implementations elsewhere
 - [ ] P3-01 — agent scaffold duplication
 
@@ -62,9 +54,9 @@ Do not hand-edit status to DONE without a pasted command + output as evidence. T
 
 ---
 
-## Current Status: Phase 0 COMPLETE
+## Current Status: NOT STARTED
 
-All Phase 0 items are DONE. Next: Phase 1 — Core loop (P0-01)
+All items are TODO. Previous self-attestation documents (PRODUCTION_FIXES_SUMMARY.md, PRODUCTION_IMPLEMENTATION_COMPLETE.md) have been identified as false/stale by the audit and must not be trusted.
 
 ## Evidence Trail
 
