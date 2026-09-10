@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from sentinel_security.auth import authenticate_request, AuthContext
 from fastapi.responses import JSONResponse
 
 from media_renderer.config import ServiceConfig
@@ -36,6 +37,19 @@ async def lifespan(app: FastAPI):
     logger.info("Media Renderer shutting down")
 
 
+
+def _verify_bearer(authorization: str | None = Header(None)) -> AuthContext:
+    """Verify JWT token using sentinel-security."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+    token = authorization[7:]
+    try:
+        return authenticate_request(token, jwt_secret=config.jwt_secret)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Authentication failed: {e}")
+
+
+
 app = FastAPI(
     title="SentraAura Media Renderer",
     version="1.0.0",
@@ -43,10 +57,6 @@ app = FastAPI(
 )
 
 
-def _require_bearer(authorization: str | None = Header(None)) -> str:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
-    return authorization[7:]
 
 
 @app.exception_handler(ValueError)
@@ -68,7 +78,8 @@ async def health_check() -> dict[str, Any]:
 async def readiness_check() -> dict[str, Any]:
     """Readiness check.
     
-    Validates database connectivity and returns actual checks.
+    Validates database connectiv
+ity and returns actual checks.
     """
     from sqlalchemy import text
     from sqlalchemy.orm import Session
@@ -95,7 +106,7 @@ async def readiness_check() -> dict[str, Any]:
 
 
 @app.post("/render")
-async def submit_render_job(request: Request, authorization: str = Depends(_require_bearer)) -> dict[str, Any]:
+async def submit_render_job(request: Request, authorization: str = Depends(_verify_bearer)) -> dict[str, Any]:
     """Submit a render job — builds plan via TimelineBuilder when timeline provided."""
     body = await request.json()
     job_id = f"render-{uuid.uuid4().hex[:12]}"
@@ -123,13 +134,14 @@ async def submit_render_job(request: Request, authorization: str = Depends(_requ
     
     # Update with plan
     job["render_plan"] = plan
-    job["timeline_clips"] = len(timeline) if isinstance(timeline, list) else 0
+    job["timeline_clip
+s"] = len(timeline) if isinstance(timeline, list) else 0
     
     return job
 
 
 @app.get("/render/jobs/{job_id}")
-async def get_render_job(job_id: str, authorization: str = Depends(_require_bearer)) -> dict[str, Any]:
+async def get_render_job(job_id: str, authorization: str = Depends(_verify_bearer)) -> dict[str, Any]:
     """Get render job status.
     
     Fixed: Now looks up job by job_id directly (not "get_render_job_" + job_id).
@@ -142,7 +154,7 @@ async def get_render_job(job_id: str, authorization: str = Depends(_require_bear
 
 
 @app.post("/render/jobs/{job_id}/cancel")
-async def cancel_render_job(request: Request, authorization: str = Depends(_require_bearer)) -> dict[str, Any]:
+async def cancel_render_job(request: Request, authorization: str = Depends(_verify_bearer)) -> dict[str, Any]:
     """Cancel a render job."""
     body = await request.json()
     svc = MediaRendererService()
@@ -156,7 +168,7 @@ async def list_render_jobs(
     status: str | None = None,
     page: int = 1,
     page_size: int = 20,
-    authorization: str = Depends(_require_bearer),
+    authorization: str = Depends(_verify_bearer),
 ) -> dict[str, Any]:
     """List render jobs."""
     svc = MediaRendererService()
@@ -164,7 +176,7 @@ async def list_render_jobs(
 
 
 @app.post("/transcode")
-async def submit_transcode_job(request: Request, authorization: str = Depends(_require_bearer)) -> dict[str, Any]:
+async def submit_transcode_job(request: Request, authorization: str = Depends(_verify_bearer)) -> dict[str, Any]:
     """Submit a transcode job."""
     body = await request.json()
     from media_renderer.models import TranscodeRequest
@@ -180,7 +192,8 @@ async def submit_transcode_job(request: Request, authorization: str = Depends(_r
 
 
 @app.get("/templates")
-async def list_templates(authorization: str = Depends(_require_bearer)) -> list[dict[str, Any]]:
+async def list_templates(authorization: str = Depends(_verify_bearer)) 
+-> list[dict[str, Any]]:
     """List available render templates."""
     svc = MediaRendererService()
     return await svc.list_templates()
