@@ -16,6 +16,13 @@ from fastapi.responses import JSONResponse
 
 from clipping_engine.config import ServiceConfig
 from clipping_engine.pipeline.highlight_scoring import score_highlights
+from clipping_engine.pipeline.audio_extraction import extract_audio
+from clipping_engine.pipeline.asr_transcription import transcribe_audio
+from clipping_engine.pipeline.speaker_diarization import diarize_speakers
+from clipping_engine.pipeline.shot_detection import detect_shots
+from clipping_engine.pipeline.scene_detection import detect_scenes
+from clipping_engine.pipeline.semantic_segmentation import segment_semantically
+
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +62,8 @@ class RenderJob(Base):
     output_url = Column(Text, default="")
     output_format = Column(String(50), default="mp4")
     started_at = Column(DateTime, default=datetime.utcnow)
-    completed_at = Column(DateTime)
+   
+ completed_at = Column(DateTime)
     error_message = Column(Text)
 
 # Initialize database
@@ -123,7 +131,8 @@ async def readiness_check(db: Session = Depends(get_db)) -> dict[str, Any]:
     
     return {
         "status": "healthy" if db_healthy else "unhealthy",
-        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmt
+ime()),
         "version": config.version,
         "checks": {
             "database": "healthy" if db_healthy else "unhealthy",
@@ -141,6 +150,12 @@ async def detect_clips(request: Request, authorization: str = Depends(_require_b
     channel_id = body.get("channel_id", "")
     tenant_id = body.get("tenant_id", "")
     segments = body.get("segments") or []
+    video_path = body.get("video_path")
+    audio_path = body.get("audio_path")
+    
+    # If no segments provided but video/audio path is given, run the perception pipeline
+    if not segments and (video_path or audio_path):
+        segments = await _run_perception_pipeline(video_path, audio_path)
     
     # Normalize segments for highlight_scoring
     norm = []
@@ -180,6 +195,7 @@ async def detect_clips(request: Request, authorization: str = Depends(_require_b
     )
     db.add(job)
     db.commit()
+
     
     return {
         "job_id": job_id,
@@ -233,7 +249,8 @@ async def get_clip_job_results(job_id: str, authorization: str = Depends(_requir
 
 @app.get("/clips/{clip_id}")
 async def get_clip(clip_id: str, authorization: str = Depends(_require_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Get clip by ID."""
+    """Get 
+clip by ID."""
     # For now, search in job candidates
     jobs = db.query(ClipJob).all()
     for job in jobs:
@@ -289,7 +306,8 @@ async def render_clip(clip_id: str, request: Request, authorization: str = Depen
     
     return {
         "job_id": job_id,
-        "clip_id": clip_id,
+   
+     "clip_id": clip_id,
         "status": "queued",
         "progress_percent": 0,
         "output_url": "",
@@ -346,7 +364,8 @@ async def score_clip(clip_id: str, request: Request, authorization: str = Depend
         raise HTTPException(status_code=404, detail="clip_id not found")
     
     # Use real scoring from the clip data
-    scores = clip_data.get("scores", {})
+    scores = clip_data.ge
+t("scores", {})
     composite = clip_data.get("composite", 0.0)
     
     return {
@@ -380,6 +399,50 @@ async def create_segment(request: Request, authorization: str = Depends(_require
     return segment
 
 
+
+
+
+async def _run_perception_pipeline(video_path: str | None, audio_path: str | None) -> list[dict[str, Any]]:
+    """Run the full perception pipeline to generate segments from video/audio."""
+    import tempfile
+    import os
+    
+    segments = []
+    
+    if video_path:
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_audio:
+            audio_path = tmp_audio.name
+        try:
+            extract_audio(video_path, output_path=audio_path)
+        except Exception as e:
+            logger.warning("Audio extraction failed: %s", e)
+            audio_path = None
+    
+    if audio_path and os.path.exists(audio_path):
+        asr_result = transcribe_audio(audio_path)
+        transcript_segments = asr_result.get("segments", [])
+        diarize_speakers(audio_path)
+        detect_shots(video_path or audio_path)
+        detect_scenes(video_path or audio_path)
+        semantic_result = segment_semantically(transcript_segments)
+        semantic_segments = semantic_result.get("semantic_segments", [])
+        
+        for i, seg in enumerate(semantic_segments):
+            segments.append({
+                "segment_id": seg.get("segment_id", f"seg-{i}"),
+                "start_seconds": float(seg.get("start_time", 0)),
+                "end_seconds": float(seg.get("end_time", 5.0)),
+                "text": seg.get("text", ""),
+                "visual_change": 0.5,
+            })
+        
+        if audio_path and os.path.exists(audio_path):
+            try:
+                os.unlink(audio_path)
+            except Exception:
+                pass
+    
+    return segments
 
 if __name__ == "__main__":
     import uvicorn
