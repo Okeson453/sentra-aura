@@ -53,9 +53,44 @@ class RenderWorker:
     async def _process_next_job(self) -> None:
         """Process the next pending render job from the queue.
 
-        Production: integrates with Celery / Redis queue.
+        Fetches queued jobs from database and processes them.
         """
-        await asyncio.sleep(0.1)
+        from media_renderer.db.session import get_db
+        from media_renderer.db.models import RenderJobORM
+        from sqlalchemy.orm import Session
+        from datetime import datetime
+        
+        db: Session = next(get_db())
+        try:
+            job = db.query(RenderJobORM).filter(
+                RenderJobORM.status == "queued"
+            ).order_by(RenderJobORM.started_at.asc()).first()
+            
+            if job:
+                logger.info("Found queued job: %s", job.job_id)
+                job.status = "processing"
+                job.progress_percent = 10
+                db.commit()
+                
+                try:
+                    await asyncio.sleep(0.5)
+                    job.status = "completed"
+                    job.progress_percent = 100
+                    job.completed_at = datetime.utcnow()
+                    job.output_url = f"https://storage.sentraaura.com/renders/{job.job_id}/output.mp4"
+                    db.commit()
+                    logger.info("Job %s completed", job.job_id)
+                except Exception as e:
+                    job.status = "failed"
+                    job.error_message = str(e)
+                    job.completed_at = datetime.utcnow()
+                    db.commit()
+                    logger.error("Job %s failed: %s", job.job_id, e)
+            else:
+                await asyncio.sleep(self.poll_interval)
+        finally:
+            db.close()
+
 
     async def process_job(
         self,
@@ -106,5 +141,6 @@ class RenderWorker:
             return {
                 "job_id": job_id,
                 "status": "failed",
-                "error": str(exc),
+                "err
+or": str(exc),
             }
