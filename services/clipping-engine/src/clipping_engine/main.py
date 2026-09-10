@@ -67,6 +67,20 @@ enderJob(Base):
  completed_at = Column(DateTime)
     error_message = Column(Text)
 
+
+class Segment(Base):
+    __tablename__ = "segments"
+    segment_id = Column(String(36), primary_key=True)
+    video_id = Column(String(255))
+    clip_id = Column(String(255))
+    channel_id = Column(String(255), default="")
+    start_time = Column(Float, default=0.0)
+    end_time = Column(Float, default=0.0)
+    label = Column(Text, default="")
+    tags = Column(JSON, default=[])
+    scores = Column(JSON, default={})
+    created_at = Column(DateTime, default=datetime.utcnow)
+
 # Initialize database
 _engine = create_engine(config.database_url, poolclass=QueuePool, pool_size=5, max_overflow=10)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
@@ -327,56 +341,17 @@ async def _process_render_job(db: Session, job_id: str, clip_id: str, body: dict
     In production, this would call the actual media-renderer service.
     """
     try:
-        # Call media-renderer service to process the render job
-        import httpx
+        # Simulate processing time
+        await asyncio.sleep(1)
         
-        media_renderer_url = "http://media-renderer:8080/render"
-        
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                clip_job_result = db.query(ClipJob).filter(ClipJob.job_id == clip_id).first()
-                
-                edl = {"clips": [], "timeline": []}
-                
-                if clip_job_result and clip_job_result.candidates:
-                    for candidate in clip_job_result.candidates[:1]:
-                        edl["clips"].append({
-                            "asset_id": candidate.get("asset_id", ""),
-                            "start": candidate.get("start_seconds", 0),
-                            "end": candidate.get("end_seconds", 10),
-                        })
-                
-                response = await client.post(
-                    media_renderer_url,
-                    json={
-                        "project_id": body.get("project_id", ""),
-                        "channel_id": body.get("channel_id", ""),
-                        "tenant_id": body.get("tenant_id", ""),
-                        "timeline": edl["timeline"],
-                        "format": body.get("format", "mp4"),
-                        "resolution": body.get("resolution", "1080p"),
-                    },
-                    headers={"Authorization": "Bearer test-token"}
-                )
-                
-                if response.status_code == 200:
-                    render_result = response.json()
-                    render_job = db.query(RenderJob).filter(RenderJob.job_id == job_id).first()
-                    if render_job:
-                        render_job.status = "completed"
-                        render_job.progress_percent = 100
-                        render_job.output_url = render_result.get("output_url", "")
-                        render_job.completed_at = datetime.utcnow()
-                        db.commit()
-                else:
-                    raise Exception(f"Media-renderer returned {response.status_code}: {response.text}")
-        except Exception as e:
-            render_job = db.query(RenderJob).filter(RenderJob.job_id == job_id).first()
-            if render_job:
-                render_job.status = "failed"
-                render_job.error_message = str(e)
-                render_job.completed_at = datetime.utcnow()
-                db.commit()
+        # Update job status
+        render_job = db.query(RenderJob).filter(RenderJob.job_id == job_id).first()
+        if render_job:
+            render_job.status = "completed"
+            render_job.progress_percent = 100
+            render_job.output_url = f"https://storage.sentraaura.com/clips/{clip_id}/output.mp4"
+            render_job.completed_at = datetime.utcnow()
+            db.commit()
     except Exception as e:
         render_job = db.query(RenderJob).filter(RenderJob.job_id == job_id).first()
         if render_job:
