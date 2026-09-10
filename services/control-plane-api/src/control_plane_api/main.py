@@ -36,7 +36,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         lifespan=lifespan,
     )
 
-    setup_middleware(app)
+    setup_middleware(
+        app,
+        jwt_secret=settings.jwt_secret,
+        jwt_algorithm=settings.jwt_algorithm,
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
