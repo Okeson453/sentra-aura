@@ -7,7 +7,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from media_renderer.main import app, _store
+from media_renderer.main import app
 
 
 client = TestClient(app)
