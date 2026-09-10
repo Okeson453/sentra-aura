@@ -71,10 +71,10 @@ typer = ">=0.12,<1"
 sentinel-exceptions = {path = "packages/sentinel-exceptions", develop = true}
 sentinel-security = {path = "packages/sentinel-security", develop = true}
 observability = {path = "packages/observability", develop = true}
-service-kit = {path = "packages/service-kit", develop = true}
+service-kit = {path = "packages/service-kit"
+, develop = true}
 agent-contracts = {path = "packages/agent-contracts", develop = true}
-sentra-aura-prompt-registry = {path = "package
-s/prompt-registry", develop = true}
+sentra-aura-prompt-registry = {path = "packages/prompt-registry", develop = true}
 provider-interfaces = {path = "packages/provider-interfaces", develop = true}
 event-bus = {path = "packages/event-bus", develop = true}
 event-schemas = {path = "packages/event-schemas", develop = true}
@@ -126,10 +126,10 @@ pythonpath = [
     "services/publishing-service/src",
     "services/research-service/src",
     "services/rights-registry-service/src",
-    "tools/sentra-cli/src",
+ 
+   "tools/sentra-cli/src",
     "services/agent-runtime/src/agent_runtime/agents/clipping/ai_clipping_agent/src",
-    "services/agent-ru
-ntime/src/agent_runtime/agents/clipping/captioning_agent/src",
+    "services/agent-runtime/src/agent_runtime/agents/clipping/captioning_agent/src",
     "services/agent-runtime/src/agent_runtime/agents/clipping/reframing_agent/src",
     "services/agent-runtime/src/agent_runtime/agents/clipping/repurposing_agent/src",
     "services/agent-runtime/src/agent_runtime/agents/distribution/community_engagement_agent/src",
