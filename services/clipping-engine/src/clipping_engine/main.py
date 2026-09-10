@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from sentinel_security.auth import authenticate_request, AuthContext
 from fastapi.responses import JSONResponse
 
 from clipping_engine.config import ServiceConfig
@@ -67,20 +68,6 @@ enderJob(Base):
  completed_at = Column(DateTime)
     error_message = Column(Text)
 
-
-class Segment(Base):
-    __tablename__ = "segments"
-    segment_id = Column(String(36), primary_key=True)
-    video_id = Column(String(255))
-    clip_id = Column(String(255))
-    channel_id = Column(String(255), default="")
-    start_time = Column(Float, default=0.0)
-    end_time = Column(Float, default=0.0)
-    label = Column(Text, default="")
-    tags = Column(JSON, default=[])
-    scores = Column(JSON, default={})
-    created_at = Column(DateTime, default=datetime.utcnow)
-
 # Initialize database
 _engine = create_engine(config.database_url, poolclass=QueuePool, pool_size=5, max_overflow=10)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
@@ -105,6 +92,19 @@ async def lifespan(app: FastAPI):
     logger.info("Clipping Engine shutting down")
 
 
+
+def _verify_bearer(authorization: str | None = Header(None)) -> AuthContext:
+    """Verify JWT token using sentinel-security."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+    token = authorization[7:]
+    try:
+        return authenticate_request(token, jwt_secret=config.jwt_secret)
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Authentication failed: {e}")
+
+
+
 app = FastAPI(
     title="SentraAura Clipping Engine",
     version="1.0.0",
@@ -112,10 +112,6 @@ app = FastAPI(
 )
 
 
-def _require_bearer(authorization: str | None = Header(None)) -> str:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
-    return authorization[7:]
 
 
 @app.exception_handler(ValueError)
@@ -158,7 +154,7 @@ ime()),
 
 
 @app.post("/clips/detect")
-async def detect_clips(request: Request, authorization: str = Depends(_require_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
+async def detect_clips(request: Request, authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
     """Detect and score clip candidates (Architecture §6 — engine owns ClipScore)."""
     body = await request.json()
     job_id = f"clip-{uuid.uuid4().hex[:12]}"
@@ -228,7 +224,7 @@ ring module
 
 
 @app.get("/clips/jobs/{job_id}")
-async def get_clip_job_status(job_id: str, authorization: str = Depends(_require_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
+async def get_clip_job_status(job_id: str, authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
     """Get clip detection job status."""
     job = db.query(ClipJob).filter(ClipJob.job_id == job_id).first()
     if not job:
@@ -249,7 +245,7 @@ async def get_clip_job_status(job_id: str, authorization: str = Depends(_require
 
 @app.get("/clips/jobs/{job_id}/results")
 async def get_clip_job
-_results(job_id: str, authorization: str = Depends(_require_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
+_results(job_id: str, authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
     """Get clip detection results."""
     job = db.query(ClipJob).filter(ClipJob.job_id == job_id).first()
     if not job:
@@ -266,7 +262,7 @@ _results(job_id: str, authorization: str = Depends(_require_bearer), db: Session
 
 
 @app.get("/clips/{clip_id}")
-async def get_clip(clip_id: str, authorization: str = Depends(_require_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
+async def get_clip(clip_id: str, authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
     """Get 
 clip by ID."""
     # For now, search in job candidates
@@ -279,7 +275,7 @@ clip by ID."""
 
 
 @app.delete("/clips/{clip_id}")
-async def delete_clip(clip_id: str, authorization: str = Depends(_require_bearer), db: Session = Depends(get_db)) -> None:
+async def delete_clip(clip_id: str, authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> None:
     """Delete a clip."""
     # Mark as archived in database
     jobs = db.query(ClipJob).all()
@@ -294,7 +290,7 @@ async def delete_clip(clip_id: str, authorization: str = Depends(_require_bearer
 
 
 @app.post("/clips/{clip_id}/render")
-async def render_clip(clip_id: str, request: Request, authorization: str = Depends(_require_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
+async def render_clip(clip_id: str, request: Request, authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
     """Render a clip to final output.
     
     In production, this should call the media-renderer service.
@@ -362,7 +358,7 @@ async def _process_render_job(db: Session, job_id: str, clip_id: str, body: dict
 
 @app.post("/clips/{clip_id}/score")
 async def score_clip(clip_id: str, request: Request, authorization: 
-str = Depends(_require_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
+str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
     """Score a clip for virality/engagement potential.
     
     Uses real scoring algorithm instead of hard-coded values.
@@ -400,7 +396,7 @@ t("scores", {})
 
 
 @app.post("/segments")
-async def create_segment(request: Request, authorization: str = Depends(_require_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
+async def create_segment(request: Request, authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
     """Create a manual segment."""
     body = await request.json()
     segment_id = body.get("segment_id") or f"seg-{uuid.uuid4().hex[:12]}"
