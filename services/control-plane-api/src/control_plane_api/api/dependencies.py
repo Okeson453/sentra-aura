@@ -15,8 +15,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from control_plane_api.config import get_settings
 from control_plane_api.db.session import get_db, get_async_db
-from sentinel_security import authenticate_request, AuthContext
-from sentinel_security.auth import AuthenticationError
 
 settings = get_settings()
 security = HTTPBearer(auto_error=False)
@@ -55,6 +53,10 @@ async def get_current_channel(request: Request) -> str:
             detail="Channel ID required",
         )
     return channel
+
+
+from sentinel_security import authenticate_request, AuthContext
+from sentinel_security.auth import AuthenticationError
 
 
 async def verify_api_key(
