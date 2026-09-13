@@ -4,8 +4,14 @@ Pydantic-settings based configuration with environment variable overrides.
 """
 from __future__ import annotations
 
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+_INSECURE_JWT_DEFAULTS = frozenset({
+    "change-me-in-production",
+    "change-me-in-production-min-32-chars",
+})
 
 
 class ServiceConfig(BaseSettings):
@@ -30,6 +36,20 @@ class ServiceConfig(BaseSettings):
     max_request_size_mb: int = Field(default=50, ge=1, le=500, description="Max request size in MB")
     request_timeout_seconds: float = Field(default=30.0, ge=5.0, le=300.0, description="Request timeout")
     enable_metrics: bool = Field(default=True, description="Enable Prometheus metrics")
+
+    @model_validator(mode="after")
+    def _reject_insecure_jwt_secret_in_production(self) -> "ServiceConfig":
+        # Fail closed when running in production-ish mode. A repository-visible
+        # shared signing key lets any caller mint valid JWTs and bypass auth
+        # entirely (CWE-1188 / CWE-798). Dev/test keep working on the default.
+        if self.is_production and (
+            self.jwt_secret in _INSECURE_JWT_DEFAULTS or len(self.jwt_secret) < 32
+        ):
+            raise ValueError(
+                "JWT_SECRET must be a strong, unique value of at least 32 "
+                "characters in production (refusing the insecure default)"
+            )
+        return self
 
     @property
     def is_production(self) -> bool:

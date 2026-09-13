@@ -8,8 +8,14 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+_INSECURE_JWT_DEFAULTS = frozenset({
+    "change-me-in-production",
+    "change-me-in-production-min-32-chars",
+})
 
 
 class Settings(BaseSettings):
@@ -111,6 +117,19 @@ class Settings(BaseSettings):
         if v not in allowed:
             raise ValueError(f"environment must be one of {allowed}, got {v}")
         return v
+
+    @model_validator(mode="after")
+    def _reject_insecure_jwt_secret_in_production(self) -> "Settings":
+        # Fail closed in production. A repository-visible or short shared
+        # signing key lets any caller mint valid JWTs and bypass authentication
+        # entirely (CWE-1188 / CWE-798). Dev/test keep working on the default.
+        if self.environment.lower() == "production":
+            if self.jwt_secret in _INSECURE_JWT_DEFAULTS or len(self.jwt_secret) < 32:
+                raise ValueError(
+                    "JWT_SECRET must be a strong, unique value of at least 32 "
+                    "characters in production (refusing the insecure default)"
+                )
+        return self
 
     @field_validator("log_level")
     @classmethod
