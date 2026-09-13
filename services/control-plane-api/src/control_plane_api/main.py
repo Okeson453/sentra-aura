@@ -6,11 +6,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from service_kit.config import Settings
 from service_kit.health import health_router
 from service_kit.lifespan import create_lifespan
 from service_kit.middleware import setup_middleware
 
+from control_plane_api.config import Settings, get_settings
 from control_plane_api.routes import (
     channels,
     content,
@@ -23,7 +23,7 @@ from control_plane_api.routes import (
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
-    settings = settings or Settings()
+    settings = settings or get_settings()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -40,6 +40,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app,
         jwt_secret=settings.jwt_secret,
         jwt_algorithm=settings.jwt_algorithm,
+        require_auth=True,
     )
     app.add_middleware(
         CORSMiddleware,

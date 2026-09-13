@@ -11,6 +11,7 @@ import uuid
 from typing import Any, Awaitable, Callable
 
 from fastapi import Request, Response
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from service_kit.metrics import get_metrics_collector
@@ -69,15 +70,17 @@ class TenantResolutionMiddleware(BaseHTTPMiddleware):
 class AuthenticationMiddleware(BaseHTTPMiddleware):
     """Extract and validate JWT, inject auth context into request state."""
 
-    def __init__(self, app: Any, *, jwt_secret: str | None = None, jwt_algorithm: str = "HS256") -> None:
+    def __init__(self, app: Any, *, jwt_secret: str | None = None, jwt_algorithm: str = "HS256", require_auth: bool = False) -> None:
         super().__init__(app)
         self.jwt_secret = jwt_secret
         self.jwt_algorithm = jwt_algorithm
+        self.require_auth = require_auth
+        self._exempt_paths = {"/health", "/ready", "/metrics"}
 
     async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         from sentinel_security import authenticate_request, AuthContext
         from sentinel_security.auth import AuthenticationError
-        
+
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
             token = auth_header[7:]
@@ -94,8 +97,18 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
                 logger.warning(f"Auth validation failed: {exc}")
                 request.state.authenticated = False
                 request.state.auth_error = str(exc)
+                if self.require_auth and request.url.path not in self._exempt_paths:
+                    return JSONResponse(
+                        status_code=401,
+                        content={"error_code": "UNAUTHENTICATED", "message": "Invalid or expired token"},
+                    )
         else:
             request.state.authenticated = False
+            if self.require_auth and request.url.path not in self._exempt_paths:
+                return JSONResponse(
+                    status_code=401,
+                    content={"error_code": "UNAUTHENTICATED", "message": "Authorization header required"},
+                )
         return await call_next(request)
 
 
@@ -141,12 +154,23 @@ class TimingMiddleware(BaseHTTPMiddleware):
         return response
 
 
-def setup_middleware(app: Any, *, jwt_secret: str | None = None, jwt_algorithm: str = "HS256") -> None:
-    """Register all standard SentraAura middleware on a FastAPI app."""
+def setup_middleware(app: Any, *, jwt_secret: str | None = None, jwt_algorithm: str = "HS256", require_auth: bool = False) -> None:
+    """Register all standard SentraAura middleware on a FastAPI app.
+
+    When ``require_auth`` is True, requests to non-exempt paths (all paths
+    except /health, /ready, /metrics) without a valid JWT are rejected with
+    401 by AuthenticationMiddleware. Defaults to False to preserve the
+    existing behaviour of services that do not configure JWT settings yet.
+    """
     app.add_middleware(RequestIDMiddleware)
     app.add_middleware(TracingMiddleware)
     app.add_middleware(TenantResolutionMiddleware)
-    app.add_middleware(AuthenticationMiddleware, jwt_secret=jwt_secret, jwt_algorithm=jwt_algorithm)
+    app.add_middleware(
+        AuthenticationMiddleware,
+        jwt_secret=jwt_secret,
+        jwt_algorithm=jwt_algorithm,
+        require_auth=require_auth,
+    )
     app.add_middleware(MetricsMiddleware)
     app.add_middleware(ErrorHandlingMiddleware)
     app.add_middleware(TimingMiddleware)
