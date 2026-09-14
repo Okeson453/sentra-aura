@@ -58,6 +58,10 @@ def auth_header() -> dict[str, str]:
         ["admin"],
         secret=settings.jwt_secret,
         ttl_seconds=3600,
+        # Tenant identity must be bound into the verified token; the API now
+        # derives the tenant scope from this claim rather than from a
+        # client-supplied header/body.
+        tenant_id="T1",
     )
     return {"Authorization": f"Bearer {token}"}
 
