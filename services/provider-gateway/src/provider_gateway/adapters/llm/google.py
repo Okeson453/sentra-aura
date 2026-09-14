@@ -33,7 +33,11 @@ class GoogleAdapter(BaseProviderAdapter[dict[str, Any]]):
         self._client: Any = None
         try:
             import google.generativeai as genai
-            genai.configure(api_key=config.api_key)
+            if config.api_key:
+                genai.configure(api_key=config.api_key)
+            # NOTE: `genai.configure` is module-global state. It is only called
+            # when a credential is actually present - a credential-less adapter
+            # must never reconfigure (and thereby blank) the process-wide key.
             self._client = genai
         except ImportError:
             logger.warning("google-generativeai not installed; Google adapter in mock mode")
@@ -51,7 +55,7 @@ class GoogleAdapter(BaseProviderAdapter[dict[str, Any]]):
         return self.MODELS
 
     async def _execute(self, request: dict[str, Any]) -> dict[str, Any]:
-        if self._client is None:
+        if self._is_mock():
             return self._mock_execute(request)
 
         prompt = request.get("prompt", "")
@@ -106,7 +110,7 @@ class GoogleAdapter(BaseProviderAdapter[dict[str, Any]]):
         }
 
     async def _health_check_impl(self) -> bool:
-        if self._client is None:
+        if self._is_mock():
             return True
         try:
             models = self._client.list_models()
