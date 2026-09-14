@@ -1,9 +1,6 @@
 """Tests for data ingestion pipeline."""
 from __future__ import annotations
 
-import asyncio
-import json
-from datetime import datetime
 from unittest.mock import AsyncMock, patch, MagicMock
 
 import pytest
@@ -114,7 +111,7 @@ class TestRSSFeedCollector:
 class TestNATSPublisher:
     @pytest.mark.asyncio
     async def test_publish_mock_mode(self):
-        publisher = NATSPublisher(NATSConfig(servers=["nats://localhost:4222"]))
+        publisher = NATSPublisher(NATSConfig(mock_mode=True))
         event = NormalizedEvent(
             event_id="evt-1",
             source="test",
@@ -129,7 +126,7 @@ class TestNATSPublisher:
 
     @pytest.mark.asyncio
     async def test_publish_batch(self):
-        publisher = NATSPublisher()
+        publisher = NATSPublisher(NATSConfig(mock_mode=True))
         events = [
             NormalizedEvent(event_id=f"evt-{i}", source="test", event_type="test_event", channel_id="ch-1", tenant_id="t-1", payload={"i": i})
             for i in range(10)
@@ -142,14 +139,15 @@ class TestNATSPublisher:
     async def test_dlq_on_failure(self):
         publisher = NATSPublisher(NATSConfig(max_publish_retries=1))
         event = NormalizedEvent(event_id="evt-fail", source="test", event_type="test_event", channel_id="ch-1", tenant_id="t-1", payload={})
+        publisher._connected = True
+        publisher._js = AsyncMock()
+        publisher._js.publish.side_effect = [OSError("publish failed"), None]
 
-        with patch.object(publisher, "_js", None):
-            with patch.object(publisher, "_send_to_dlq", new_callable=AsyncMock) as mock_dlq:
-                # Force failure by making publish raise
-                result = await publisher.publish("sentraura.events.test", event)
-                # In mock mode it still succeeds, but let's test DLQ path directly
-                await publisher._send_to_dlq(event, "forced error")
-                mock_dlq.assert_called_once()
+        result = await publisher.publish("sentraura.events.test", event)
+
+        assert result.success is False
+        assert result.error == "publish failed"
+        assert publisher._js.publish.await_count == 2
 
 
 class TestNormalizers:
@@ -197,3 +195,122 @@ class TestNormalizers:
         normalized = await normalize_rss_feed(raw)
         assert normalized.event_type == "rss_item"
         assert normalized.payload["title"] == "News"
+
+
+class TestPublisherFailureContracts:
+    @staticmethod
+    def _event(event_id: str = "evt-1") -> NormalizedEvent:
+        return NormalizedEvent(
+            event_id=event_id,
+            source="test",
+            event_type="test_event",
+            channel_id="ch-1",
+            tenant_id="t-1",
+            payload={},
+        )
+
+    @pytest.mark.asyncio
+    async def test_missing_transport_does_not_report_success(self):
+        publisher = NATSPublisher(NATSConfig(max_connect_attempts=1))
+        with patch.dict("sys.modules", {"nats": None}):
+            result = await publisher.publish("sentraura.events.test", self._event())
+
+        assert result.success is False
+        assert "transport unavailable" in (result.error or "").lower()
+
+    @pytest.mark.asyncio
+    async def test_failed_connection_is_bounded_and_does_not_report_success(self):
+        publisher = NATSPublisher(
+            NATSConfig(
+                max_connect_attempts=2,
+                connect_timeout_seconds=0.01,
+                reconnect_wait_seconds=0,
+            )
+        )
+        with patch("nats.connect", new_callable=AsyncMock, side_effect=OSError("refused")) as connect:
+            result = await publisher.publish("sentraura.events.test", self._event())
+
+        assert result.success is False
+        assert "failed after 2 attempts" in (result.error or "")
+        assert "refused" in (result.error or "")
+        assert connect.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_explicit_mock_mode_is_labelled(self):
+        publisher = NATSPublisher(NATSConfig(mock_mode=True))
+        result = await publisher.publish("sentraura.events.test", self._event())
+
+        assert result.success is True
+        assert "mock mode" in (result.error or "").lower()
+        assert publisher.is_ready is True
+
+
+class TestPipelinePublishAccounting:
+    @staticmethod
+    def _pipeline(results: list[PublishResult]):
+        from data_ingestion_pipeline.pipeline import IngestionPipeline
+
+        raw_events = [
+            RawEvent(source="test", source_type="test", raw_payload={"i": i})
+            for i in range(len(results))
+        ]
+        normalized_events = [
+            NormalizedEvent(
+                event_id=result.event_id,
+                source="test",
+                event_type="test_event",
+                payload={},
+            )
+            for result in results
+        ]
+        collector = MagicMock(source="test")
+        collector.collect = AsyncMock(return_value=raw_events)
+        normalizer = MagicMock()
+        normalizer.normalize = AsyncMock(side_effect=normalized_events)
+        publisher = MagicMock()
+        publisher.publish_batch = AsyncMock(return_value=results)
+        return IngestionPipeline(collector, normalizer, publisher)
+
+    @pytest.mark.asyncio
+    async def test_complete_when_every_publish_succeeds(self):
+        pipeline = self._pipeline([
+            PublishResult(success=True, event_id="evt-1"),
+            PublishResult(success=True, event_id="evt-2"),
+        ])
+
+        job = await pipeline.run({}, subject="sentraura.events.test")
+
+        assert job.status == "COMPLETED"
+        assert job.errors == []
+
+    @pytest.mark.asyncio
+    async def test_partial_lists_failing_subjects_events_and_reasons(self):
+        pipeline = self._pipeline([
+            PublishResult(success=True, event_id="evt-1"),
+            PublishResult(success=False, event_id="evt-2", error="broker refused"),
+            PublishResult(success=False, event_id="evt-3", error="ack timeout"),
+        ])
+
+        job = await pipeline.run({}, subject="sentraura.events.test")
+
+        assert job.status == "PARTIAL"
+        assert job.errors == [
+            "Publish failed for subject sentraura.events.test, event evt-2: broker refused",
+            "Publish failed for subject sentraura.events.test, event evt-3: ack timeout",
+        ]
+
+
+@pytest.mark.asyncio
+async def test_nats_readiness_reflects_publisher_state():
+    from data_ingestion_pipeline.main import _nats_readiness, publisher
+    from service_kit.health import HealthStatus
+
+    with patch.object(publisher.config, "mock_mode", False), patch.object(
+        publisher, "_connected", False
+    ):
+        status, _ = await _nats_readiness()
+        assert status is HealthStatus.UNHEALTHY
+
+    with patch.object(publisher.config, "mock_mode", True):
+        status, _ = await _nats_readiness()
+        assert status is HealthStatus.HEALTHY

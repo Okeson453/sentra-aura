@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from data_ingestion_pipeline.models import IngestionJob, RawEvent, NormalizedEvent
+from data_ingestion_pipeline.models import IngestionJob, NormalizedEvent
 from data_ingestion_pipeline.collectors import BaseCollector
 from data_ingestion_pipeline.normalizers import BaseNormalizer
 from data_ingestion_pipeline.publisher import NATSPublisher
@@ -48,9 +48,14 @@ class IngestionPipeline:
 
             # Publish
             if self.publisher:
-                published = await self.publisher.publish_batch(subject, normalized_events)
-                if published != len(normalized_events):
-                    job.errors.append(f"Only {published}/{len(normalized_events)} events published")
+                publish_results = await self.publisher.publish_batch(subject, normalized_events)
+                failures = [result for result in publish_results if not result.success]
+                for failure in failures:
+                    reason = failure.error or "unknown publish error"
+                    job.errors.append(
+                        f"Publish failed for subject {subject}, "
+                        f"event {failure.event_id}: {reason}"
+                    )
 
             job.status = "COMPLETED" if not job.errors else "PARTIAL"
         except Exception as exc:

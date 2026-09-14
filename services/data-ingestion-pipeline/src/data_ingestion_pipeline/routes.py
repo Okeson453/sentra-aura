@@ -16,11 +16,21 @@ from data_ingestion_pipeline.normalizers import (
     SocialTrendNormalizer,
     CompetitorNormalizer,
 )
-from data_ingestion_pipeline.publisher import NATSPublisher
+from data_ingestion_pipeline.config import get_settings
+from data_ingestion_pipeline.publisher import NATSConfig, NATSPublisher
 
 router = APIRouter()
 
-publisher = NATSPublisher()
+settings = get_settings()
+publisher = NATSPublisher(
+    NATSConfig(
+        servers=[settings.nats_url],
+        max_connect_attempts=settings.nats_max_reconnect,
+        connect_timeout_seconds=settings.nats_connect_timeout_seconds,
+        reconnect_wait_seconds=settings.nats_reconnect_wait_seconds,
+        mock_mode=settings.nats_mock_mode,
+    )
+)
 
 
 @router.post("/ingest/youtube")

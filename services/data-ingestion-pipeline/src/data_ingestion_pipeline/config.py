@@ -50,7 +50,10 @@ class Settings(BaseSettings):
 
     # NATS
     nats_url: str = Field(default="nats://localhost:4222", alias="NATS_URL")
-    nats_max_reconnect: int = Field(default=10, alias="NATS_MAX_RECONNECT")
+    nats_max_reconnect: int = Field(default=3, alias="NATS_MAX_RECONNECT")
+    nats_connect_timeout_seconds: float = Field(default=1.0, alias="NATS_CONNECT_TIMEOUT_SECONDS")
+    nats_reconnect_wait_seconds: float = Field(default=0.25, alias="NATS_RECONNECT_WAIT_SECONDS")
+    nats_mock_mode: bool = Field(default=False, alias="NATS_MOCK_MODE")
 
     # Temporal
     temporal_host: str = Field(default="localhost:7233", alias="TEMPORAL_HOST")

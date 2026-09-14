@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import random
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PublishResult:
     """Result of a publish operation."""
+
     success: bool
     event_id: str
     seq: int | None = None
@@ -31,6 +33,7 @@ class PublishResult:
 @dataclass
 class NATSConfig:
     """Configuration for NATS JetStream connection."""
+
     servers: list[str] = field(default_factory=lambda: ["nats://localhost:4222"])
     stream_name: str = "SENTRAURA_EVENTS"
     subjects: list[str] = field(default_factory=lambda: ["sentraura.events.>"])
@@ -43,6 +46,10 @@ class NATSConfig:
     dlq_subject: str = "sentraura.events.dlq"
     dlq_stream: str = "SENTRAURA_DLQ"
     max_publish_retries: int = 3
+    max_connect_attempts: int = 3
+    connect_timeout_seconds: float = 1.0
+    reconnect_wait_seconds: float = 0.25
+    mock_mode: bool = False
 
 
 class NATSPublisher:
@@ -53,67 +60,129 @@ class NATSPublisher:
         self._nc: Any = None
         self._js: Any = None
         self._connected = False
+        self._connect_lock = asyncio.Lock()
+        self._connection_error: str | None = None
+
+    @property
+    def is_ready(self) -> bool:
+        """Return whether publishing is intentionally available."""
+        return self.config.mock_mode or (self._connected and self._js is not None)
 
     async def connect(self) -> None:
-        """Connect to NATS and initialize JetStream."""
+        """Connect to NATS and initialize JetStream with bounded retries."""
+        if self.is_ready:
+            return
+        if self.config.mock_mode:
+            self._connected = True
+            logger.warning("NATS explicit mock mode enabled; events will not leave the process")
+            return
+
+        async with self._connect_lock:
+            if self.is_ready:
+                return
+            try:
+                import nats
+                from nats.js.api import RetentionPolicy, StorageType, StreamConfig
+            except ImportError as exc:
+                self._connection_error = f"NATS transport unavailable: {exc}"
+                raise RuntimeError(self._connection_error) from exc
+
+            attempts = max(1, self.config.max_connect_attempts)
+            last_error: Exception | None = None
+            for attempt in range(1, attempts + 1):
+                try:
+                    self._nc = await asyncio.wait_for(
+                        nats.connect(
+                            servers=self.config.servers,
+                            allow_reconnect=True,
+                            max_reconnect_attempts=0,
+                            connect_timeout=self.config.connect_timeout_seconds,
+                        ),
+                        timeout=self.config.connect_timeout_seconds + 0.5,
+                    )
+                    self._js = self._nc.jetstream()
+                    await self._ensure_streams(StreamConfig, RetentionPolicy, StorageType)
+                    self._connected = True
+                    self._connection_error = None
+                    logger.info("NATS JetStream publisher connected")
+                    return
+                except Exception as exc:
+                    last_error = exc
+                    self._connected = False
+                    self._js = None
+                    if self._nc is not None:
+                        try:
+                            await self._nc.close()
+                        except Exception:
+                            logger.debug("Failed to close unsuccessful NATS connection", exc_info=True)
+                        self._nc = None
+                    if attempt < attempts:
+                        delay = self.config.reconnect_wait_seconds * (2 ** (attempt - 1))
+                        await asyncio.sleep(delay * random.uniform(0.5, 1.5))
+
+            self._connection_error = (
+                f"NATS connection failed after {attempts} attempts: {last_error}"
+            )
+            logger.error(self._connection_error)
+            raise RuntimeError(self._connection_error) from last_error
+
+    async def _ensure_streams(self, stream_config: Any, retention: Any, storage: Any) -> None:
+        """Ensure the primary and dead-letter streams exist."""
         try:
-            import nats
-            from nats.js.api import StreamConfig, RetentionPolicy, StorageType
-            self._nc = await nats.connect(servers=self.config.servers)
-            self._js = self._nc.jetstream()
-
-            # Ensure main stream exists
-            try:
-                await self._js.add_stream(
-                    StreamConfig(
-                        name=self.config.stream_name,
-                        subjects=self.config.subjects,
-                        max_msgs=self.config.max_msgs,
-                        max_bytes=self.config.max_bytes,
-                        retention=RetentionPolicy.LIMITS,
-                        storage=StorageType.FILE,
-                        replicas=self.config.replicas,
-                        max_age=self.config.max_age_seconds,
-                    )
+            await self._js.add_stream(
+                stream_config(
+                    name=self.config.stream_name,
+                    subjects=self.config.subjects,
+                    max_msgs=self.config.max_msgs,
+                    max_bytes=self.config.max_bytes,
+                    retention=retention.LIMITS,
+                    storage=storage.FILE,
+                    replicas=self.config.replicas,
+                    max_age=self.config.max_age_seconds,
                 )
-                logger.info(f"Created JetStream stream {self.config.stream_name}")
-            except Exception as exc:
-                if "already in use" in str(exc).lower():
-                    logger.info(f"Stream {self.config.stream_name} already exists")
-                else:
-                    raise
-
-            # Ensure DLQ stream exists
-            try:
-                await self._js.add_stream(
-                    StreamConfig(
-                        name=self.config.dlq_stream,
-                        subjects=[self.config.dlq_subject],
-                        retention=RetentionPolicy.WORK_QUEUE,
-                        storage=StorageType.FILE,
-                        max_msgs=100_000,
-                    )
-                )
-                logger.info(f"Created DLQ stream {self.config.dlq_stream}")
-            except Exception as exc:
-                if "already in use" in str(exc).lower():
-                    logger.info(f"DLQ stream {self.config.dlq_stream} already exists")
-                else:
-                    raise
-
-            self._connected = True
-            logger.info("NATS JetStream publisher connected")
-        except ImportError:
-            logger.warning("nats-py not installed, operating in mock mode")
-            self._connected = True
+            )
+            logger.info("Created JetStream stream %s", self.config.stream_name)
         except Exception as exc:
-            logger.error(f"NATS connection failed: {exc}")
-            raise
+            if "already in use" not in str(exc).lower():
+                raise
+            logger.info("Stream %s already exists", self.config.stream_name)
+
+        try:
+            await self._js.add_stream(
+                stream_config(
+                    name=self.config.dlq_stream,
+                    subjects=[self.config.dlq_subject],
+                    retention=retention.WORK_QUEUE,
+                    storage=storage.FILE,
+                    max_msgs=100_000,
+                )
+            )
+            logger.info("Created DLQ stream %s", self.config.dlq_stream)
+        except Exception as exc:
+            if "already in use" not in str(exc).lower():
+                raise
+            logger.info("DLQ stream %s already exists", self.config.dlq_stream)
 
     async def publish(self, subject: str, event: NormalizedEvent) -> PublishResult:
         """Publish a single event to JetStream with retry and DLQ fallback."""
+        if self.config.mock_mode:
+            if not self._connected:
+                await self.connect()
+            return PublishResult(
+                success=True,
+                event_id=event.event_id,
+                error="mock mode: event was not sent to NATS",
+            )
+
         if not self._connected:
-            await self.connect()
+            try:
+                await self.connect()
+            except Exception as exc:
+                return PublishResult(success=False, event_id=event.event_id, error=str(exc))
+
+        if self._js is None:
+            error = self._connection_error or "NATS JetStream context unavailable"
+            return PublishResult(success=False, event_id=event.event_id, error=error)
 
         payload = json.dumps({
             "event_id": event.event_id,
@@ -126,38 +195,64 @@ class NATSPublisher:
             "metadata": event.metadata,
         }).encode()
 
-        for attempt in range(self.config.max_publish_retries):
+        attempts = max(1, self.config.max_publish_retries)
+        for attempt in range(attempts):
             try:
-                if self._js:
-                    ack = await self._js.publish(subject, payload)
-                    return PublishResult(success=True, event_id=event.event_id, seq=ack.seq, retry_count=attempt)
-                else:
-                    # Mock mode
-                    return PublishResult(success=True, event_id=event.event_id, retry_count=attempt)
+                ack = await self._js.publish(subject, payload)
+                return PublishResult(
+                    success=True,
+                    event_id=event.event_id,
+                    seq=ack.seq,
+                    retry_count=attempt,
+                )
             except Exception as exc:
-                logger.warning(f"Publish attempt {attempt + 1} failed for {event.event_id}: {exc}")
-                if attempt < self.config.max_publish_retries - 1:
-                    await asyncio.sleep(2 ** attempt)
+                logger.warning(
+                    "Publish attempt %s failed for %s: %s", attempt + 1, event.event_id, exc
+                )
+                if attempt < attempts - 1:
+                    await asyncio.sleep(2**attempt)
                 else:
-                    # Send to DLQ
                     await self._send_to_dlq(event, str(exc))
-                    return PublishResult(success=False, event_id=event.event_id, error=str(exc), retry_count=attempt)
+                    return PublishResult(
+                        success=False,
+                        event_id=event.event_id,
+                        error=str(exc),
+                        retry_count=attempt,
+                    )
 
         return PublishResult(success=False, event_id=event.event_id, error="Max retries exceeded")
 
-    async def publish_batch(self, subject: str, events: list[NormalizedEvent]) -> list[PublishResult]:
+    async def publish_batch(
+        self, subject: str, events: list[NormalizedEvent]
+    ) -> list[PublishResult]:
         """Publish a batch of events concurrently."""
+        if not events:
+            return []
+        if not self.config.mock_mode and not self._connected:
+            try:
+                await self.connect()
+            except Exception as exc:
+                return [
+                    PublishResult(success=False, event_id=event.event_id, error=str(exc))
+                    for event in events
+                ]
+
         semaphore = asyncio.Semaphore(50)
 
         async def _pub(event: NormalizedEvent) -> PublishResult:
             async with semaphore:
-                return await self.publish(subject, event)
+                try:
+                    return await self.publish(subject, event)
+                except Exception as exc:
+                    return PublishResult(success=False, event_id=event.event_id, error=str(exc))
 
-        results = await asyncio.gather(*[_pub(e) for e in events], return_exceptions=True)
-        return [r if isinstance(r, PublishResult) else PublishResult(success=False, event_id="", error=str(r)) for r in results]
+        return await asyncio.gather(*(_pub(event) for event in events))
 
     async def _send_to_dlq(self, event: NormalizedEvent, error: str) -> None:
-        """Send a failed event to the dead-letter queue."""
+        """Send a failed event to the dead-letter queue when JetStream is available."""
+        if self._js is None:
+            logger.error("Cannot send event %s to DLQ: NATS is unavailable", event.event_id)
+            return
         try:
             payload = json.dumps({
                 "original_event": {
@@ -170,16 +265,16 @@ class NATSPublisher:
                 "failed_at": datetime.utcnow().isoformat(),
                 "retry_count": self.config.max_publish_retries,
             }).encode()
-            if self._js:
-                await self._js.publish(self.config.dlq_subject, payload)
-                logger.info(f"Sent event {event.event_id} to DLQ")
-            else:
-                logger.info(f"[MOCK] Would send event {event.event_id} to DLQ")
+            await self._js.publish(self.config.dlq_subject, payload)
+            logger.info("Sent event %s to DLQ", event.event_id)
         except Exception as exc:
-            logger.error(f"DLQ publish failed for {event.event_id}: {exc}")
+            logger.error("DLQ publish failed for %s: %s", event.event_id, exc)
 
     async def close(self) -> None:
+        """Close the NATS connection."""
         if self._nc:
             await self._nc.close()
-            self._connected = False
-            logger.info("NATS connection closed")
+        self._nc = None
+        self._js = None
+        self._connected = False
+        logger.info("NATS connection closed")
