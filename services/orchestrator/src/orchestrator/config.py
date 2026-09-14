@@ -61,6 +61,8 @@ class Settings(BaseSettings):
     jwt_secret: str = Field(default="change-me-in-production", alias="JWT_SECRET")
     jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
     jwt_expiry_minutes: int = Field(default=60, alias="JWT_EXPIRY_MINUTES")
+    service_auth_token_ttl_seconds: int = Field(default=300, alias="SERVICE_AUTH_TOKEN_TTL_SECONDS")
+    service_request_timeout_seconds: float = Field(default=30.0, alias="SERVICE_REQUEST_TIMEOUT_SECONDS")
     api_key_header: str = Field(default="X-API-Key", alias="API_KEY_HEADER")
     allowed_tenants: list[str] = Field(default_factory=list, alias="ALLOWED_TENANTS")
 
@@ -114,16 +116,20 @@ class Settings(BaseSettings):
         return v
 
     @model_validator(mode="after")
-    def _reject_insecure_jwt_secret_in_production(self) -> "Settings":
+    def _validate_service_credentials(self) -> "Settings":
         # Fail closed in production. A repository-visible or short shared
         # signing key lets any caller mint valid JWTs and bypass authentication
         # entirely (CWE-1188 / CWE-798). Dev/test keep working on the default.
-        if self.environment.lower() == "production":
+        if self.environment.lower() != "development":
             if self.jwt_secret in _INSECURE_JWT_DEFAULTS or len(self.jwt_secret) < 32:
                 raise ValueError(
                     "JWT_SECRET must be a strong, unique value of at least 32 "
-                    "characters in production (refusing the insecure default)"
+                    "characters outside development (refusing the insecure default)"
                 )
+        if self.service_auth_token_ttl_seconds <= 0:
+            raise ValueError("SERVICE_AUTH_TOKEN_TTL_SECONDS must be greater than zero")
+        if self.service_request_timeout_seconds <= 0:
+            raise ValueError("SERVICE_REQUEST_TIMEOUT_SECONDS must be greater than zero")
         return self
 
     @field_validator("log_level")

@@ -9,10 +9,13 @@ description = "SentraAura Orchestrator — Temporal workflows and activities"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.110.0",
+    "httpx>=0.26.0",
+    "pydantic-settings>=2.1.0",
     "uvicorn[standard]>=0.29.0",
     "temporalio>=1.5.0",
     "service-kit",
     "sentinel-exceptions",
+    "sentinel-security",
     "agent-contracts",
 ]
 

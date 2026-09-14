@@ -5,11 +5,15 @@ These activities perform the actual work of the autonomous loop.
 """
 from __future__ import annotations
 
-import httpx
 import logging
+
+import httpx
 from typing import Any
 
+from sentinel_security import create_service_token
 from temporalio import activity
+
+from orchestrator.config import _INSECURE_JWT_DEFAULTS, get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +43,33 @@ async def _call_service(service_name: str, endpoint: str, payload: dict[str, Any
             f"known services: {sorted(SERVICES)}"
         )
     url = f"{base}{endpoint}"
+    settings = get_settings()
+    signing_secret = settings.jwt_secret
+    if settings.environment != "development" and (
+        not signing_secret or signing_secret in _INSECURE_JWT_DEFAULTS
+    ):
+        raise RuntimeError(
+            "A secure JWT_SECRET is required for authenticated internal service calls"
+        )
 
-    async with httpx.AsyncClient(timeout=30.0) as client:
+    token = create_service_token(
+        settings.service_name,
+        roles=["service"],
+        secret=signing_secret,
+        ttl_seconds=settings.service_auth_token_ttl_seconds,
+        algorithm=settings.jwt_algorithm,
+    )
+    headers = {
+        "Authorization": f"Bearer {token}",
+        # Provider Gateway currently uses its service credential through this
+        # header, while JWT-protected services consume Authorization.
+        settings.api_key_header: signing_secret,
+    }
+
+    async with httpx.AsyncClient(
+        timeout=httpx.Timeout(settings.service_request_timeout_seconds),
+        headers=headers,
+    ) as client:
         try:
             if payload is not None:
                 response = await client.post(url, json=payload)
@@ -371,13 +400,6 @@ async def record_analytics(channel_id: str, video_id: str, publish_result: dict[
 @activity.defn
 async def update_learning(channel_id: str, video_id: str, analytics_result: dict[str, Any], clips: dict[str, Any]) -> dict[str, Any]:
     """Update learning models by calling the analytics-ingestion service."""
-    payload = {
-        "channel_id": channel_id,
-        "video_id": video_id,
-        "analytics": analytics_result,
-        "clips": clips,
-        "event_type": "learning_update",
-    }
     # Trigger signal computation over the persisted metrics history so the
     # feedback path reaches the learning layer rather than a nonexistent route.
     result = await _call_service_or_raise(
