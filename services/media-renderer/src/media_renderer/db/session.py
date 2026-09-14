@@ -36,17 +36,26 @@ def get_engine():
     )
 
 
+def _to_async_url(url: str) -> str:
+    """Convert a sync database URL to the equivalent async dialect URL."""
+    if url.startswith("sqlite:///"):
+        return url.replace("sqlite:///", "sqlite+aiosqlite:///", 1)
+    if url.startswith("sqlite://"):
+        return url.replace("sqlite://", "sqlite+aiosqlite://", 1)
+    if url.startswith("postgresql://") or url.startswith("postgres://"):
+        return url.replace("postgresql://", "postgresql+asyncpg://", 1).replace(
+            "postgres://", "postgresql+asyncpg://", 1
+        )
+    if "postgresql+psycopg2" in url:
+        return url.replace("postgresql+psycopg2", "postgresql+asyncpg")
+    if "postgresql+psycopg" in url:
+        return url.replace("postgresql+psycopg", "postgresql+asyncpg")
+    return url
+
+
 def get_async_engine():
     """Create and return an async SQLAlchemy engine."""
-    async_url = _settings.database_url
-    # Transform sync SQLite URL to async
-    if async_url.startswith("sqlite:///"):
-        async_url = async_url.replace("sqlite:///", "sqlite+aiosqlite:///")
-    elif async_url.startswith("sqlite://"):
-        async_url = async_url.replace("sqlite://", "sqlite+aiosqlite://")
-    # Transform PostgreSQL sync URL to async
-    async_url = async_url.replace("postgresql+psycopg2", "postgresql+asyncpg")
-    
+    async_url = _to_async_url(_settings.database_url)
     if _settings.database_url.startswith("sqlite"):
         return create_async_engine(async_url, poolclass=NullPool, echo=_settings.log_level == "DEBUG")
     return create_async_engine(
