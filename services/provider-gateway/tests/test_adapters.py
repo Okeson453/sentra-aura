@@ -27,7 +27,15 @@ from provider_gateway.adapters.base import ProviderCapability
 
 @pytest.fixture
 def cfg() -> ProviderConfig:
-    return ProviderConfig(provider_id="test", api_key="test-key", enabled=True)
+    """Adapter config for unit tests.
+
+    ``mock_mode=True`` is explicit and load-bearing: the adapters now make a
+    real network call whenever a credential is present (``api_key`` here is the
+    placeholder ``test-key``), so without this flag every "mock" test in this
+    module would issue live requests to the upstream provider. Mock mode is
+    requested deliberately rather than inherited from a broken client object.
+    """
+    return ProviderConfig(provider_id="test", api_key="test-key", enabled=True, mock_mode=True)
 
 
 class TestOpenAIAdapter:
@@ -330,3 +338,61 @@ class TestAssemblyAIAdapter:
         result = await adapter.execute({"audio_url": "https://example.com/audio.mp3"})
         assert "text" in result
         assert "utterances" in result
+
+
+class TestMockModeIsKeyedOnCredential:
+    """Regression guard for the P0 where mock mode was keyed on whether the
+    ``httpx`` *library* was importable (it always is - it is a hard dependency)
+    rather than on the presence of a credential.
+
+    With no credential the adapters therefore built a live client with
+    ``api_key=None`` and issued real, billable requests to the upstream provider,
+    leaking the key in query strings (SerpAPI/AssemblyAI). Every test below
+    fails against that implementation and passes only when a credential-less
+    adapter is guaranteed not to reach the network.
+    """
+
+    def test_no_credential_selects_mock_mode(self) -> None:
+        adapter = MidjourneyAdapter(ProviderConfig(provider_id="test", api_key=None, enabled=True))
+        assert adapter._is_mock() is True
+
+    def test_credential_selects_live_mode_by_default(self) -> None:
+        adapter = MidjourneyAdapter(ProviderConfig(provider_id="test", api_key="real-key", enabled=True))
+        assert adapter._is_mock() is False
+
+    def test_explicit_mock_mode_overrides_present_credential(self) -> None:
+        adapter = MidjourneyAdapter(
+            ProviderConfig(provider_id="test", api_key="real-key", enabled=True, mock_mode=True)
+        )
+        assert adapter._is_mock() is True
+
+    @pytest.mark.asyncio
+    async def test_credentialless_adapter_never_touches_the_network(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The core assertion: without a credential the adapter must not call out."""
+        import httpx
+
+        def _explode(*args: object, **kwargs: object) -> object:
+            raise AssertionError("adapter attempted a live network call with no credential")
+
+        monkeypatch.setattr(httpx.AsyncClient, "post", _explode)
+        monkeypatch.setattr(httpx.AsyncClient, "get", _explode)
+
+        adapter = MidjourneyAdapter(ProviderConfig(provider_id="test", api_key=None, enabled=True))
+        result = await adapter.execute({"prompt": "test", "model": "midjourney-v6"})
+        assert result["image_url"]
+        assert result["provider"] == "midjourney"
+
+    @pytest.mark.asyncio
+    async def test_serpapi_credentialless_does_not_call_or_leak(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """SerpAPI put the key in the query string; with no key it must not call."""
+        import httpx
+
+        def _explode(*args: object, **kwargs: object) -> object:
+            raise AssertionError("serpapi adapter attempted a live search with no credential")
+
+        monkeypatch.setattr(httpx.AsyncClient, "get", _explode)
+
+        adapter = SerpAPIAdapter(ProviderConfig(provider_id="test", api_key=None, enabled=True))
+        result = await adapter.execute({"query": "test"})
+        assert result["results"]
+        assert result["provider"] == "serpapi"
