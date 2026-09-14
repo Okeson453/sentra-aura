@@ -15,29 +15,55 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from control_plane_api.config import get_settings
 from control_plane_api.db.session import get_db, get_async_db
+from sentinel_exceptions import AuthorizationError
+from sentinel_security import auth_error_to_http_status, resolve_tenant_id
 
 settings = get_settings()
 security = HTTPBearer(auto_error=False)
 
 
-async def get_current_tenant(request: Request) -> str:
-    """Resolve tenant from header, query param, or path."""
-    tenant = (
-        request.headers.get("X-Tenant-ID")
-        or request.query_params.get("tenant_id")
-        or request.path_params.get("tenant_id")
-    )
-    if not tenant:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Tenant ID required",
+def get_authenticated_tenant(
+    request: Request, requested_tenant_id: str | None = None
+) -> str:
+    """Resolve the tenant this request is authorised to act on.
+
+    SECURITY: the tenant is derived from the *verified* JWT claim carried on
+    ``request.state.auth_context``. It is never taken from a client-supplied
+    header, query parameter or request body. A caller that names a tenant it
+    does not own is rejected instead of silently served, which is what made
+    cross-tenant reads, mutations and deletes possible.
+
+    ``requested_tenant_id`` is treated purely as an assertion to verify.
+    """
+    auth_context = getattr(request.state, "auth_context", None)
+    try:
+        tenant = resolve_tenant_id(
+            auth_context,
+            requested_tenant_id,
+            enforce_isolation=getattr(settings, "enforce_tenant_isolation", True),
         )
+    except AuthorizationError as exc:
+        raise HTTPException(
+            status_code=auth_error_to_http_status(exc),
+            detail=str(exc),
+        ) from exc
+
     if settings.allowed_tenants and tenant not in settings.allowed_tenants:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Tenant not authorized",
         )
     return tenant
+
+
+async def get_current_tenant(request: Request) -> str:
+    """Authenticated-context tenant dependency.
+
+    Retained with its original name/signature so existing route declarations
+    keep working, but the value is now authentication-derived rather than
+    client-supplied.
+    """
+    return get_authenticated_tenant(request)
 
 
 async def get_current_channel(request: Request) -> str:

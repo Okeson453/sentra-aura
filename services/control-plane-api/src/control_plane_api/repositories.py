@@ -24,8 +24,16 @@ class ChannelRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def get(self, channel_id: str) -> Channel | None:
-        return self.db.query(Channel).filter(Channel.id == channel_id).first()
+    def get(self, channel_id: str, tenant_id: str | None = None) -> Channel | None:
+        """Fetch a channel, scoped to ``tenant_id`` when one is supplied.
+
+        The tenant filter is part of the query, not a post-hoc check, so a
+        caller can never observe another tenant's row even transiently.
+        """
+        q = self.db.query(Channel).filter(Channel.id == channel_id)
+        if tenant_id:
+            q = q.filter(Channel.tenant_id == tenant_id)
+        return q.first()
 
     def list(self, tenant_id: str | None = None, limit: int = 100, offset: int = 0) -> tuple[list[Channel], int]:
         q = self.db.query(Channel)
@@ -41,8 +49,8 @@ class ChannelRepository:
         self.db.refresh(channel)
         return channel
 
-    def update(self, channel_id: str, updates: dict[str, Any]) -> Channel | None:
-        channel = self.get(channel_id)
+    def update(self, channel_id: str, updates: dict[str, Any], tenant_id: str | None = None) -> Channel | None:
+        channel = self.get(channel_id, tenant_id=tenant_id)
         if not channel:
             return None
         for k, v in updates.items():
@@ -51,8 +59,8 @@ class ChannelRepository:
         self.db.refresh(channel)
         return channel
 
-    def delete(self, channel_id: str) -> bool:
-        channel = self.get(channel_id)
+    def delete(self, channel_id: str, tenant_id: str | None = None) -> bool:
+        channel = self.get(channel_id, tenant_id=tenant_id)
         if not channel:
             return False
         self.db.delete(channel)
