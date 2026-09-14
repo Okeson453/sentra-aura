@@ -28,6 +28,7 @@ class AzureTTSAdapter(BaseProviderAdapter[dict[str, Any]]):
         super().__init__(config)
         self._client: Any = None
         self._region = config.extra_headers.get("region", "westus2")
+        self._speech_config: Any = None
         try:
             import azure.cognitiveservices.speech as speechsdk
             self._speech_config = speechsdk.SpeechConfig(
@@ -51,7 +52,7 @@ class AzureTTSAdapter(BaseProviderAdapter[dict[str, Any]]):
         return self.MODELS
 
     async def _execute(self, request: dict[str, Any]) -> dict[str, Any]:
-        if self._client is None:
+        if self._is_mock():
             return self._mock_execute(request)
 
         text = request.get("text", "")
@@ -92,7 +93,7 @@ class AzureTTSAdapter(BaseProviderAdapter[dict[str, Any]]):
         }
 
     async def _health_check_impl(self) -> bool:
-        if self._client is None:
+        if self._is_mock():
             return True
         try:
             synthesizer = self._client.SpeechSynthesizer(speech_config=self._speech_config)
