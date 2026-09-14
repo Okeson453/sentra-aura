@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections.abc import Generator
 from datetime import datetime
 
-from sqlalchemy import JSON, Column, DateTime, Integer, String, Text, create_engine, inspect, text
+from sqlalchemy import JSON, Column, DateTime, Float, Integer, String, Text, create_engine, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
@@ -29,6 +29,24 @@ class ClipJob(Base):
     error_message = Column(Text)
     attempt_count = Column(Integer, nullable=False, default=0)
     claimed_at = Column(DateTime)
+
+
+class Segment(Base):
+    """Persisted manual or pipeline-derived segment (Architecture §6 / Backend §23)."""
+    __tablename__ = "segments"
+
+    segment_id = Column(String(64), primary_key=True)
+    video_id = Column(String(255), nullable=False, index=True)
+    channel_id = Column(String(255), default="")
+    tenant_id = Column(String(255), default="")
+    start_seconds = Column(Float, nullable=False, default=0.0)
+    end_seconds = Column(Float, nullable=False, default=0.0)
+    label = Column(String(255), default="")
+    tags = Column(JSON, default=list)
+    text = Column(Text, default="")
+    metadata_json = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class RenderJob(Base):
