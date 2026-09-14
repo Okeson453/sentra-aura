@@ -6,6 +6,12 @@ from sentinel_security.auth import AuthContext, authenticate_request, create_ser
 from sentinel_security.rbac import require_permission, require_role
 from sentinel_security.audit import AuditLogBuilder
 from sentinel_security.injection_defense import InjectionClassifier, sanitize_untrusted_input
+from sentinel_security.tenant import (
+    TENANT_ID_MAX_LENGTH,
+    auth_error_to_http_status,
+    resolve_tenant_id,
+    validate_tenant_id,
+)
 
 __all__ = [
     "AuthContext",
@@ -16,4 +22,8 @@ __all__ = [
     "AuditLogBuilder",
     "InjectionClassifier",
     "sanitize_untrusted_input",
+    "TENANT_ID_MAX_LENGTH",
+    "auth_error_to_http_status",
+    "resolve_tenant_id",
+    "validate_tenant_id",
 ]
