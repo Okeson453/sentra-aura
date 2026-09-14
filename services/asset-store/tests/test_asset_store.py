@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import pytest
-from asset_store.models import Asset, ProvenanceRecord
-from asset_store.backend import LocalStorageBackend
 from asset_store.service import AssetStoreService
 
 
@@ -33,7 +31,8 @@ async def test_delete():
     asset = await svc.upload("C1", "T1", "image", "test.png", b"data", "image/png")
     ok = await svc.delete(asset.asset_id)
     assert ok is True
-    assert asset.status == "DELETED"
+    # Assert the persisted state, not the stale object returned by upload().
+    assert await svc.get(asset.asset_id) is None
 
 
 @pytest.mark.asyncio

@@ -17,6 +17,9 @@ dependencies = [
     "opentelemetry-sdk>=1.23.0",
     "opentelemetry-exporter-otlp>=1.23.0",
     "prometheus-client>=0.20.0",
+    # Imported by rights_registry_service.main for JWT verification; without it
+    # the service cannot start outside this monorepo's shared venv.
+    "sentinel-security",
 ]
 
 [project.optional-dependencies]
