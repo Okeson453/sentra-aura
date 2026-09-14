@@ -13,6 +13,7 @@ from agent_runtime.agents.clipping.ai_clipping_agent.agent import AIClippingAgen
 from agent_runtime.agents.clipping.ai_clipping_agent.config import AgentConfig
 from agent_runtime.envelope import AgentMessageEnvelope
 from agent_runtime.tool_permissions import PermissionDeniedError, PermissionMatrix
+from sentinel_security.auth import create_service_token
 
 REPO = Path(__file__).resolve().parents[8]
 MOCK = REPO / "local/mock-provider-gateway/main.py"
@@ -91,6 +92,9 @@ def agent(gw, clipping_engine):
         config=AgentConfig(
             provider_gateway_url=gw,
             clipping_engine_url=clipping_engine,
+            clipping_engine_token=create_service_token(
+                "ai-clipping-agent", ["service"], secret="change-me-in-production"
+            ),
             timeout_seconds=30,
         )
     )
@@ -243,6 +247,22 @@ async def test_script_fallback_still_produces_candidates(agent):
     )
     assert r["segment_count"] >= 1
     assert r["candidates"] or r["rejected"]
+
+
+@pytest.mark.asyncio
+async def test_engine_http_failure_is_visible(gw):
+    failing_agent = AIClippingAgent(
+        config=AgentConfig(
+            provider_gateway_url=gw,
+            clipping_engine_url="http://127.0.0.1:1",
+            clipping_engine_token="not-a-valid-token",
+            timeout_seconds=1,
+        )
+    )
+    result = await failing_agent.run(env({"video_id": "v-fail", "segments": _marine_segments()}))
+    assert result["status"] == "error"
+    assert result["result"]["error"]
+    assert not result["candidates"]
 
 
 class TestPermissionEnforcement:

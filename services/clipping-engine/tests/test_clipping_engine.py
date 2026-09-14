@@ -5,11 +5,16 @@ Covers health checks, auth, and detect/score path.
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
+from sentinel_security.auth import create_service_token
 
-from clipping_engine.main import app
-
+from clipping_engine.main import app, config
 
 client = TestClient(app)
+
+
+def _auth_headers() -> dict[str, str]:
+    token = create_service_token("clipping-engine-test", ["service"], secret=config.jwt_secret)
+    return {"Authorization": f"Bearer {token}"}
 
 
 class TestHealth:
@@ -45,7 +50,7 @@ class TestDetectAndScore:
     def test_detect_returns_scored_candidates(self) -> None:
         response = client.post(
             "/clips/detect",
-            headers={"Authorization": "Bearer dev-token"},
+            headers=_auth_headers(),
             json={
                 "video_id": "v1",
                 "segments": [

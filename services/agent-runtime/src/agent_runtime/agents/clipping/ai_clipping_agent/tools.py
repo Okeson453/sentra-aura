@@ -37,6 +37,21 @@ async def select_clips(payload: dict[str, Any], *, config: AgentConfig) -> dict[
     max_clips = int(payload.get("max_clips") or getattr(config, "max_clips", 5) or 5)
     base = (getattr(config, "clipping_engine_url", None) or "http://localhost:8000").rstrip("/")
 
+    token = getattr(config, "clipping_engine_token", "")
+    if not token:
+        return {
+            "status": "error",
+            "tool": "select_clips",
+            "error": "clipping-engine authentication token is not configured",
+            "candidates": [],
+            "rejected": [],
+            "segment_count": len(segments) if isinstance(segments, list) else 0,
+            "artifacts": [],
+            "raw": "engine_error=missing_auth_token",
+            "usage": {"total_tokens": 0, "estimated_cost_usd": 0.0},
+        }
+
+    headers = {"Authorization": f"Bearer {token}"}
     candidates: list[dict[str, Any]] = []
     segment_count = len(segments) if isinstance(segments, list) else 0
     try:
@@ -44,7 +59,7 @@ async def select_clips(payload: dict[str, Any], *, config: AgentConfig) -> dict[
             # REAL_INTEGRATION: clipping-engine
             r = await client.post(
                 f"{base}/clips/detect",
-                headers={"Authorization": "Bearer dev-token"},
+                headers=headers,
                 json={
                     "video_id": video_id,
                     "topic": topic,
@@ -62,7 +77,7 @@ async def select_clips(payload: dict[str, Any], *, config: AgentConfig) -> dict[
                 # REAL_INTEGRATION: clipping-engine
                 r2 = await client.get(
                     f"{base}/clips/jobs/{job_id}/results",
-                    headers={"Authorization": "Bearer dev-token"},
+                    headers=headers,
                 )
                 if r2.status_code < 400:
                     body = r2.json()

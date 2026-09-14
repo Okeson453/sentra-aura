@@ -16,6 +16,9 @@ class AgentConfig(BaseSettings):
     default_model: str = "mock-gpt-4"
     max_clips: int = 5
     score_threshold: float = 0.35
+    clipping_engine_token: str = Field(
+        default_factory=lambda: os.environ.get("CLIPPING_ENGINE_TOKEN", "")
+    )
     clipping_engine_url: str = Field(
         default_factory=lambda: os.environ.get("CLIPPING_ENGINE_URL", "http://localhost:8000")
     )
