@@ -118,6 +118,27 @@ jobs:
           - model-eval-service
           - billing-service
           - agent-runtime
+    services:
+      # asset-store, content-graph-service, control-plane-api and several
+      # others default DATABASE_URL to postgresql+psycopg2://sentraaura:...@
+      # localhost:5432/sentraaura. This job previously provisioned no database
+      # at all, so those legs failed on `connection refused` regardless of code
+      # health - the gate could never go green on any commit.
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: sentraaura
+          POSTGRES_PASSWORD: sentraaura
+          POSTGRES_DB: sentraaura
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sentraaura -d sentraaura"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgresql+psycopg2://sentraaura:sentraaura@localhost:5432/sentraaura
     steps:
       - name: Checkout
         uses: actions/checkout@v4
