@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import math
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import numpy as np
@@ -24,6 +24,41 @@ class NormalizedMetrics:
     composite_score: float
     confidence: float
     measured_at: datetime
+
+
+def _coerce_datetime(value: Any) -> datetime:
+    """Return ``value`` as a naive UTC datetime.
+
+    Accepts a ``datetime``, an ISO-8601 string (with or without a trailing ``Z``,
+    as produced by the REST surface), ``None`` (treated as now), or a POSIX
+    timestamp.  ``measured_at`` arrives as a *string* over JSON, and the previous
+    implementation performed ``datetime.utcnow() - <str>`` directly, raising
+    ``TypeError`` and turning every /api/v1/normalize request into a 400.
+    """
+    if value is None:
+        return datetime.utcnow()
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, (int, float)):
+        return datetime.utcfromtimestamp(value)
+    elif isinstance(value, str):
+        text = value.strip()
+        if text.endswith(("Z", "z")):
+            text = text[:-1] + "+00:00"
+        try:
+            parsed = datetime.fromisoformat(text)
+        except ValueError:
+            logger.warning("Unparseable measured_at %r; defaulting to utcnow()", value)
+            return datetime.utcnow()
+    else:
+        logger.warning("Unsupported measured_at type %s; defaulting to utcnow()", type(value))
+        return datetime.utcnow()
+
+    # Keep a single naive-UTC representation: the rest of this module compares
+    # against datetime.utcnow(), which raises when mixed with aware datetimes.
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return parsed
 
 
 def normalize_metrics(
@@ -47,7 +82,7 @@ def normalize_metrics(
     watch_time = raw_metrics.get("watch_time_seconds", 0)
     likes = raw_metrics.get("likes", 0)
     comments = raw_metrics.get("comments", 0)
-    measured_at = raw_metrics.get("measured_at", datetime.utcnow())
+    measured_at = _coerce_datetime(raw_metrics.get("measured_at"))
 
     # Channel baselines
     channel_avg_ctr = channel_baseline.get("avg_ctr", 0.05)

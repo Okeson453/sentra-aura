@@ -26,7 +26,7 @@ def test_register_and_get():
         "endpoints": [],
     }
     response = client.post("/api/v1/agents", json=payload)
-    assert response.status_code == 200
+    assert response.status_code == 201
     data = response.json()
     assert data["agent_id"] == "int-test-agent"
 
