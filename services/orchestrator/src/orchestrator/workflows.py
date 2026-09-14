@@ -56,20 +56,25 @@ class AgentWorkflow:
                     args=(task.task_type, task.agent_type, task.inputs),
                     start_to_close_timeout=timedelta(minutes=10),
                     retry_policy=RetryPolicy(
-                        maximum_attempts=task.max_retries,
+                        maximum_attempts=max(1, task.max_retries + 1),
                         initial_interval=timedelta(seconds=5),
+                        backoff_coefficient=2.0,
                     ),
                 )
                 task.outputs = result
                 task.state = TaskState.COMPLETED
             except Exception as exc:
+                # An activity that exhausted its retries must fail the workflow
+                # deterministically here. Falling through would leave the outcome
+                # to the tail-check and let downstream stages observe a silently
+                # partial execution.
                 task.state = TaskState.FAILED
                 task.error = str(exc)
                 task.retries += 1
-                if task.retries >= task.max_retries:
-                    execution.state = WorkflowState.FAILED
-                    execution.error = f"Task {task_id} failed permanently: {exc}"
-                    return execution.__dict__
+                execution.state = WorkflowState.FAILED
+                execution.error = f"Task {task_id} failed after {task.max_retries} retries: {exc}"
+                execution.completed_at = workflow.now().isoformat()
+                return execution.__dict__
 
         if execution.all_tasks_complete():
             execution.state = WorkflowState.COMPLETED
@@ -197,7 +202,8 @@ class LongFormVideoWorkflow:
             "topic": topic,
             "video_id": video.get("video_id"),
             "clip_count": len(clips.get("candidates", [])),
-            "published": publish_result.get("status") == "published",
+            "published": publish_result.get("status") == "completed"
+            and bool(publish_result.get("video_publication_id")),
             "status": "COMPLETED",
             "loop_complete": True,
         }
