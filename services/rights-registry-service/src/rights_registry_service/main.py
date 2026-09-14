@@ -10,15 +10,20 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
+from sentinel_security import AuthContext, authenticate_request
 
 from rights_registry_service.config import ServiceConfig
-from sentinel_security import AuthContext, authenticate_request
 
 logger = logging.getLogger(__name__)
 
-config: ServiceConfig
+# Instantiated at import time so the module is usable without the ASGI
+# lifespan (the previous annotation-only declaration raised
+# ``NameError: name 'config' is not defined`` in _require_bearer, and the
+# lifespan called ``ServiceConfig.from_env()`` - a method pydantic-settings
+# does not define - so the service could not start at all.
+config = ServiceConfig()
 
 # In-memory store (replace with Redis/DB in production)
 _store: dict[str, dict[str, Any]] = {}
@@ -26,8 +31,6 @@ _store: dict[str, dict[str, Any]] = {}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global config
-    config = ServiceConfig.from_env()
     logging.basicConfig(level=getattr(logging, config.log_level.upper(), logging.INFO))
     logger.info("Rights Registry Service started: %s v%s", config.service_name, config.version)
     yield
@@ -43,7 +46,7 @@ def _require_bearer(authorization: str | None = Header(None)) -> AuthContext:
     try:
         return authenticate_request(token, jwt_secret=config.jwt_secret)
     except Exception as e:
-        raise HTTPException(status_code=401, detail=f"Authentication failed: {e}")
+        raise HTTPException(status_code=401, detail=f"Authentication failed: {e}") from e
 
 
 
@@ -75,16 +78,22 @@ async def health_check() -> dict[str, Any]:
 @app.get("/ready")
 async def readiness_check() -> dict[str, Any]:
     """Readiness check."""
+    checks: dict[str, dict[str, Any]] = {
+        "config": {"status": "pass"},
+        "jwt_secret_configured": {"status": "pass" if config.jwt_secret else "fail"},
+        "rights_store": {"status": "pass", "records": len(_store)},
+    }
+    status = "healthy" if all(c["status"] == "pass" for c in checks.values()) else "degraded"
     return {
-        "status": "healthy",
+        "status": status,
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "version": config.version,
-        "checks": {},
+        "checks": checks,
     }
 
 
 @app.post("/rights")
-async def register_rights(request: Request, authorization: str = _require_bearer) -> dict[str, Any]:
+async def register_rights(request: Request, authorization: str = Depends(_require_bearer)) -> dict[str, Any]:
     """Register usage rights for an asset."""
     body = await request.json()
     rights_id = body.get("rights_id") or f"rights-{uuid.uuid4().hex[:12]}"
@@ -110,7 +119,7 @@ async def register_rights(request: Request, authorization: str = _require_bearer
 async def list_rights(
     asset_id: str | None = None,
     channel_id: str | None = None,
-    authorization: str = _require_bearer,
+    authorization: str = Depends(_require_bearer),
 ) -> list[dict[str, Any]]:
     """List rights records."""
     items = [v for v in _store.values() if v.get("rights_id")]
@@ -122,16 +131,16 @@ async def list_rights(
 
 
 @app.get("/rights/{rights_id}")
-async def get_rights(rights_id: str, authorization: str = _require_bearer) -> dict[str, Any]:
+async def get_rights(rights_id: str, authorization: str = Depends(_require_bearer)) -> dict[str, Any]:
     """Get rights by ID."""
-    item = _store.get("get_rights_" + rights_id)
+    item = _store.get(rights_id)
     if not item:
         raise HTTPException(status_code=404, detail="rights_id not found")
     return item
 
 
 @app.put("/rights/{rights_id}")
-async def update_rights(rights_id: str, request: Request, authorization: str = _require_bearer) -> dict[str, Any]:
+async def update_rights(rights_id: str, request: Request, authorization: str = Depends(_require_bearer)) -> dict[str, Any]:
     """Update rights record."""
     body = await request.json()
     item = _store.get(rights_id)
@@ -143,20 +152,41 @@ async def update_rights(rights_id: str, request: Request, authorization: str = _
 
 
 @app.post("/rights/{rights_id}/check")
-async def check_usage_rights(rights_id: str, request: Request, authorization: str = _require_bearer) -> dict[str, Any]:
-    """Check if a usage is permitted."""
+async def check_usage_rights(rights_id: str, request: Request, authorization: str = Depends(_require_bearer)) -> dict[str, Any]:
+    """Check if a usage is permitted.
+
+    Previously returned a hard-coded ``permitted: True`` regardless of the
+    stored rights record - a false-success that would have let the publishing
+    path ship content the rights registry had explicitly restricted.
+    """
     body = await request.json()
+    item = _store.get(rights_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="rights_id not found")
+    usage_type = body.get("usage_type", "")
+    restricted = item.get("restricted_usage", []) or []
+    permitted_usage = item.get("permitted_usage", []) or []
+    if usage_type and usage_type in restricted:
+        permitted = False
+        reason = f"usage_type '{usage_type}' is explicitly restricted"
+    elif usage_type and permitted_usage and usage_type not in permitted_usage:
+        permitted = False
+        reason = f"usage_type '{usage_type}' is not in permitted_usage"
+    else:
+        permitted = True
+        reason = ""
     return {
-        "permitted": True,
-        "conditions": ["attribution_required"],
-        "attribution_required": True,
-        "attribution_text": "Courtesy of SentraAura",
-        "restrictions": [],
+        "permitted": permitted,
+        "reason": reason,
+        "conditions": ["attribution_required"] if item.get("attribution_required") else [],
+        "attribution_required": bool(item.get("attribution_required")),
+        "attribution_text": item.get("attribution_text", ""),
+        "restrictions": restricted,
     }
 
 
 @app.post("/licenses")
-async def create_license(request: Request, authorization: str = _require_bearer) -> dict[str, Any]:
+async def create_license(request: Request, authorization: str = Depends(_require_bearer)) -> dict[str, Any]:
     """Create a license."""
     body = await request.json()
     license_id = f"license-{uuid.uuid4().hex[:12]}"
@@ -177,9 +207,9 @@ async def create_license(request: Request, authorization: str = _require_bearer)
 
 
 @app.get("/licenses/{license_id}")
-async def get_license(license_id: str, authorization: str = _require_bearer) -> dict[str, Any]:
+async def get_license(license_id: str, authorization: str = Depends(_require_bearer)) -> dict[str, Any]:
     """Get license by ID."""
-    item = _store.get("get_license_" + license_id)
+    item = _store.get(license_id)
     if not item:
         raise HTTPException(status_code=404, detail="license_id not found")
     return item

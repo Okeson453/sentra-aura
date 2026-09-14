@@ -2,12 +2,9 @@
 from __future__ import annotations
 
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
-
-from asset_store.models import Asset, ProvenanceRecord
-from asset_store.service import AssetStoreService
 from asset_store.backend import LocalStorageBackend
-from asset_store.virus_scanner import SignatureScanner, ClamAVScanner, ScanResult, AsyncScanQueue
+from asset_store.service import AssetStoreService
+from asset_store.virus_scanner import AsyncScanQueue, ClamAVScanner, SignatureScanner
 
 
 class TestAssetStoreService:
@@ -28,7 +25,7 @@ class TestAssetStoreService:
     async def test_upload_with_virus_detection(self):
         service = AssetStoreService(backend=LocalStorageBackend(), scanner=SignatureScanner())
         # EICAR test signature
-        eicar = b"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
+        eicar = rb"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
         with pytest.raises(ValueError, match="Virus scan failed"):
             await service.upload(
                 channel_id="ch-1", tenant_id="t-1", asset_type="VIDEO",
@@ -38,12 +35,15 @@ class TestAssetStoreService:
     @pytest.mark.asyncio
     async def test_upload_skip_scan(self):
         service = AssetStoreService(backend=LocalStorageBackend(), scanner=SignatureScanner())
-        eicar = b"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
-        asset = await service.upload(
-            channel_id="ch-1", tenant_id="t-1", asset_type="VIDEO",
-            filename="virus.txt", data=eicar, skip_scan=True,
-        )
-        assert asset.status == "ACTIVE"
+        eicar = rb"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
+        # ``skip_scan`` is intentionally ignored (hardening F-025): a caller
+        # must not be able to bypass virus scanning, so an infected upload is
+        # rejected even when skip_scan=True is requested.
+        with pytest.raises(ValueError, match="Virus scan failed"):
+            await service.upload(
+                channel_id="ch-1", tenant_id="t-1", asset_type="VIDEO",
+                filename="virus.txt", data=eicar, skip_scan=True,
+            )
 
     @pytest.mark.asyncio
     async def test_download_asset(self):
@@ -65,7 +65,12 @@ class TestAssetStoreService:
         )
         ok = await service.delete(asset.asset_id)
         assert ok is True
-        assert asset.status == "DELETED"
+        # delete() persists the soft-delete. Assert the durable state rather than
+        # the stale instance returned by upload(): get() must no longer resolve
+        # the asset and listing must exclude it.
+        assert await service.get(asset.asset_id) is None
+        remaining = await service.list_assets(channel_id="ch-1")
+        assert all(a.asset_id != asset.asset_id for a in remaining)
 
     @pytest.mark.asyncio
     async def test_list_assets_filtered(self):
@@ -111,7 +116,7 @@ class TestVirusScanner:
     @pytest.mark.asyncio
     async def test_signature_scanner_detects_eicar(self):
         scanner = SignatureScanner()
-        eicar = b"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
+        eicar = rb"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
         result = await scanner.scan(eicar, "test.txt")
         assert result.clean is False
         assert result.threat == "eicar_test"
@@ -138,7 +143,7 @@ class TestAsyncScanQueue:
         queue = AsyncScanQueue(scanner, max_concurrent=2)
         items = [
             ("asset-1", b"clean", "clean.txt"),
-            ("asset-2", b"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*", "virus.txt"),
+            ("asset-2", rb"X5O!P%@AP[4\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*", "virus.txt"),
             ("asset-3", b"also clean", "clean2.txt"),
         ]
         results = await queue.scan_batch(items)
