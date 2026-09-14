@@ -31,12 +31,20 @@ class TestHealth:
 
 
 class TestAuth:
-    """Tests for authentication."""
+    """Tests for authentication.
+
+    These previously targeted ``/platforms`` - a route that exists nowhere in
+    this service (the request 404'd, so the assertions proved nothing about
+    authentication). They now exercise a real authenticated route, which is
+    what makes the expected 401 meaningful.
+    """
+
+    AUTHENTICATED_ROUTE = "/render/jobs"
 
     def test_missing_auth(self) -> None:
-        response = client.get("/platforms")
+        response = client.get(self.AUTHENTICATED_ROUTE)
         assert response.status_code == 401
 
     def test_invalid_auth(self) -> None:
-        response = client.get("/platforms", headers={"Authorization": "Invalid"})
+        response = client.get(self.AUTHENTICATED_ROUTE, headers={"Authorization": "Invalid"})
         assert response.status_code == 401

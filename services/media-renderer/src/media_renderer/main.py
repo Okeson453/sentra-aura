@@ -77,16 +77,15 @@ async def health_check() -> dict[str, Any]:
 @app.get("/ready")
 async def readiness_check() -> dict[str, Any]:
     """Readiness check.
-    
-    Validates database connectiv
-ity and returns actual checks.
+
+    Validates database connectivity and returns actual checks.
     """
     from sqlalchemy import text
     from sqlalchemy.orm import Session
-    
+
     checks = {}
     status = "healthy"
-    
+
     # Check database connectivity
     try:
         db = next(get_db())
@@ -96,7 +95,7 @@ ity and returns actual checks.
     except Exception as e:
         checks["database"] = {"status": "error", "message": str(e)}
         status = "degraded"
-    
+
     return {
         "status": status,
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -107,7 +106,7 @@ ity and returns actual checks.
 
 @app.post("/render")
 async def submit_render_job(request: Request, authorization: str = Depends(_verify_bearer)) -> dict[str, Any]:
-    """Submit a render job — builds plan via TimelineBuilder when timeline provided."""
+    """Submit a render job - builds plan via TimelineBuilder when timeline provided."""
     body = await request.json()
     job_id = f"render-{uuid.uuid4().hex[:12]}"
     timeline = body.get("timeline") or []
@@ -117,7 +116,7 @@ async def submit_render_job(request: Request, authorization: str = Depends(_veri
         plan = svc.build_render_plan({"clips": timeline, "timeline": timeline, "format": body.get("format") or "mp4"})
     except Exception as exc:
         plan = {"error": str(exc), "timeline_clips": len(timeline) if isinstance(timeline, list) else 0}
-    
+
     # Create the job in database via service
     from media_renderer.models import RenderRequest
     render_request = RenderRequest(
@@ -131,18 +130,18 @@ async def submit_render_job(request: Request, authorization: str = Depends(_veri
         callback_url=body.get("callback_url"),
     )
     job = await svc.create_render_job(render_request)
-    
+
     # Update with plan
     job["render_plan"] = plan
     job["timeline_clips"] = len(timeline) if isinstance(timeline, list) else 0
-    
+
     return job
 
 
 @app.get("/render/jobs/{job_id}")
 async def get_render_job(job_id: str, authorization: str = Depends(_verify_bearer)) -> dict[str, Any]:
     """Get render job status.
-    
+
     Fixed: Now looks up job by job_id directly (not "get_render_job_" + job_id).
     """
     svc = MediaRendererService()
@@ -153,11 +152,22 @@ async def get_render_job(job_id: str, authorization: str = Depends(_verify_beare
 
 
 @app.post("/render/jobs/{job_id}/cancel")
-async def cancel_render_job(request: Request, authorization: str = Depends(_verify_bearer)) -> dict[str, Any]:
-    """Cancel a render job."""
-    body = await request.json()
+async def cancel_render_job(job_id: str, authorization: str = Depends(_verify_bearer)) -> dict[str, Any]:
+    """Cancel a render job addressed by the path template.
+
+    The job id previously came from an unbound ``job_id`` free variable while
+    the request body was read and discarded, so FastAPI raised ``NameError`` on
+    every call: the route could never cancel anything. The path parameter is
+    now bound and the body is no longer parsed (the endpoint takes no body).
+
+    A job that does not exist is reported as 404 rather than a 200
+    ``not_found`` payload - the caller asked to cancel a specific resource and
+    nothing was cancelled, so this must not read as success.
+    """
     svc = MediaRendererService()
     result = await svc.cancel_job(job_id)
+    if result.get("status") == "not_found":
+        raise HTTPException(status_code=404, detail="job_id not found")
     return {"status": "ok", **result}
 
 
