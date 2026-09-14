@@ -9,11 +9,9 @@ from __future__ import annotations
 import contextvars
 import uuid
 from datetime import datetime
-from typing import Any
 
-from sqlalchemy import Column, String, DateTime, Boolean, event, inspect, text
-from sqlalchemy.orm import declarative_base, declared_attr, with_loader_criteria, Session
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy import Boolean, Column, DateTime, String, event, text
+from sqlalchemy.orm import Session, declarative_base, declared_attr, with_loader_criteria
 
 Base = declarative_base()
 
@@ -99,19 +97,19 @@ class AuditMixin:
     """Mixin adding created_at, updated_at, created_by, updated_by columns."""
 
     @declared_attr
-    def created_at(cls) -> Column:
+    def created_at(cls):
         return Column(DateTime, default=datetime.utcnow, nullable=False)
 
     @declared_attr
-    def updated_at(cls) -> Column:
+    def updated_at(cls):
         return Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
     @declared_attr
-    def created_by(cls) -> Column:
+    def created_by(cls):
         return Column(String(255), nullable=True)
 
     @declared_attr
-    def updated_by(cls) -> Column:
+    def updated_by(cls):
         return Column(String(255), nullable=True)
 
 
@@ -119,15 +117,15 @@ class SoftDeleteMixin:
     """Mixin adding soft-delete support."""
 
     @declared_attr
-    def is_deleted(cls) -> Column:
+    def is_deleted(cls):
         return Column(Boolean, default=False, nullable=False, index=True)
 
     @declared_attr
-    def deleted_at(cls) -> Column:
+    def deleted_at(cls):
         return Column(DateTime, nullable=True)
 
     @declared_attr
-    def deleted_by(cls) -> Column:
+    def deleted_by(cls):
         return Column(String(255), nullable=True)
 
 
@@ -135,11 +133,11 @@ class TenantMixin:
     """Mixin adding tenant_id and channel_id for multi-tenancy."""
 
     @declared_attr
-    def tenant_id(cls) -> Column:
+    def tenant_id(cls):
         return Column(String(32), nullable=False, index=True)
 
     @declared_attr
-    def channel_id(cls) -> Column:
+    def channel_id(cls):
         return Column(String(32), nullable=False, index=True)
 
 

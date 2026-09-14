@@ -7,10 +7,8 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
-
-from sqlalchemy.orm import Session
 
 from asset_store.backend import StorageBackend
 from asset_store.db.session import get_db
@@ -67,7 +65,7 @@ class DatabaseMetadataBackend:
                 storage_provider=result.get("provider", "local"),
                 checksum=checksum,
                 status="ACTIVE",
-                metadata=metadata or {},
+                asset_metadata=metadata or {},
                 created_by=created_by,
                 updated_by=created_by,
             )
@@ -117,7 +115,12 @@ class DatabaseMetadataBackend:
                 return False
             
             orm_asset.is_deleted = True
-            orm_asset.deleted_at = datetime.utcnow()
+            orm_asset.deleted_at = datetime.now(UTC)
+            # ``status`` is the lifecycle field surfaced to API consumers and the
+            # publishing path. Without this the soft-delete flags changed while
+            # the asset still reported ``status: ACTIVE`` - i.e. a deleted asset
+            # was indistinguishable from a live one on read.
+            orm_asset.status = "DELETED"
             db.commit()
             return True
         finally:
@@ -142,7 +145,7 @@ class DatabaseMetadataBackend:
                 action=action,
                 agent_id=agent_id,
                 source_asset_ids=source_asset_ids or [],
-                metadata=metadata or {},
+                asset_metadata=metadata or {},
                 tenant_id="",  # Will be populated by RLS context
                 channel_id="",
                 created_by=agent_id,
