@@ -6,59 +6,105 @@ Matches Backend Spec §4.
 from __future__ import annotations
 
 from contextlib import asynccontextmanager, contextmanager
+from functools import lru_cache
 from typing import AsyncGenerator, Generator
 
 from sqlalchemy import create_engine, event
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
-from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.pool import QueuePool, NullPool
+from sqlalchemy.engine import Engine, make_url
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import NullPool, QueuePool
 
 from asset_store.config import get_settings
 from asset_store.db.base import Base
 
 
-_settings = get_settings()
+def _async_database_url(database_url: str) -> str:
+    """Return an async-driver URL for each supported synchronous URL form."""
+    url = make_url(database_url)
+    if url.drivername in {"postgresql", "postgresql+psycopg2"}:
+        return url.set(drivername="postgresql+asyncpg").render_as_string(hide_password=False)
+    if url.drivername == "sqlite":
+        return url.set(drivername="sqlite+aiosqlite").render_as_string(hide_password=False)
+    return database_url
 
 
-def get_engine():
-    """Create and return a SQLAlchemy engine with connection pooling."""
-    if _settings.environment == "test":
-        return create_engine(
-            _settings.database_url,
-            poolclass=NullPool,
-            echo=_settings.database_echo,
+def _set_sqlite_pragma(dbapi_conn, connection_record) -> None:
+    """Enable SQLite foreign-key enforcement for every new connection."""
+    del connection_record
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
+
+
+@lru_cache(maxsize=1)
+def get_engine() -> Engine:
+    """Return the process-wide synchronous SQLAlchemy engine, creating it lazily."""
+    settings = get_settings()
+    kwargs = {"echo": settings.database_echo}
+    if settings.environment == "test":
+        kwargs["poolclass"] = NullPool
+    else:
+        kwargs.update(
+            poolclass=QueuePool,
+            pool_size=settings.database_pool_size,
+            max_overflow=settings.database_max_overflow,
+            pool_timeout=settings.database_pool_timeout,
+            pool_pre_ping=True,
         )
-    return create_engine(
-        _settings.database_url,
-        poolclass=QueuePool,
-        pool_size=_settings.database_pool_size,
-        max_overflow=_settings.database_max_overflow,
-        pool_timeout=_settings.database_pool_timeout,
-        pool_pre_ping=True,
-        echo=_settings.database_echo,
-    )
+
+    engine = create_engine(settings.database_url, **kwargs)
+    if engine.dialect.name == "sqlite":
+        event.listen(engine, "connect", _set_sqlite_pragma)
+    return engine
 
 
-def get_async_engine():
-    """Create and return an async SQLAlchemy engine."""
-    async_url = _settings.database_url.replace("postgresql+psycopg2", "postgresql+asyncpg")
-    if _settings.environment == "test":
-        return create_async_engine(async_url, poolclass=NullPool, echo=_settings.database_echo)
-    return create_async_engine(
-        async_url,
-        pool_size=_settings.database_pool_size,
-        max_overflow=_settings.database_max_overflow,
-        pool_timeout=_settings.database_pool_timeout,
-        pool_pre_ping=True,
-        echo=_settings.database_echo,
-    )
+@lru_cache(maxsize=1)
+def get_async_engine() -> AsyncEngine:
+    """Return the process-wide async SQLAlchemy engine, creating it lazily."""
+    settings = get_settings()
+    async_url = _async_database_url(settings.database_url)
+    kwargs = {"echo": settings.database_echo}
+    if settings.environment == "test":
+        kwargs["poolclass"] = NullPool
+    else:
+        kwargs.update(
+            pool_size=settings.database_pool_size,
+            max_overflow=settings.database_max_overflow,
+            pool_timeout=settings.database_pool_timeout,
+            pool_pre_ping=True,
+        )
+    engine = create_async_engine(async_url, **kwargs)
+    if engine.dialect.name == "sqlite":
+        event.listen(engine.sync_engine, "connect", _set_sqlite_pragma)
+    return engine
 
 
-# Synchronous session factory
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=get_engine())
+class _LazySessionMaker(sessionmaker):
+    """A sessionmaker that binds to the memoized engine on first use."""
 
-# Async session factory
-AsyncSessionLocal = async_sessionmaker(autocommit=False, autoflush=False, bind=get_async_engine(), class_=AsyncSession)
+    def __call__(self, **local_kw):
+        if self.kw.get("bind") is None:
+            self.configure(bind=get_engine())
+        return super().__call__(**local_kw)
+
+
+class _LazyAsyncSessionMaker(async_sessionmaker):
+    """An async_sessionmaker that binds to the memoized engine on first use."""
+
+    def __call__(self, **local_kw):
+        if self.kw.get("bind") is None:
+            self.configure(bind=get_async_engine())
+        return super().__call__(**local_kw)
+
+
+# Public factories remain import-safe and callable without creating engines.
+SessionLocal = _LazySessionMaker(autocommit=False, autoflush=False)
+AsyncSessionLocal = _LazyAsyncSessionMaker(
+    autocommit=False,
+    autoflush=False,
+    class_=AsyncSession,
+)
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -73,10 +119,7 @@ def get_db() -> Generator[Session, None, None]:
 async def get_async_db() -> AsyncGenerator[AsyncSession, None]:
     """FastAPI dependency for async DB sessions."""
     async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
+        yield session
 
 
 @contextmanager
@@ -114,12 +157,3 @@ async def init_db_async() -> None:
     """Async create all tables (development/testing only)."""
     async with get_async_engine().begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-
-
-@event.listens_for(get_engine(), "connect")
-def _set_sqlite_pragma(dbapi_conn, connection_record):
-    """Enable foreign key support for SQLite connections."""
-    if "sqlite" in _settings.database_url:
-        cursor = dbapi_conn.cursor()
-        cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.close()

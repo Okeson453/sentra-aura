@@ -80,17 +80,19 @@ class PromptValidator:
         errors.extend(tmpl_errors)
         warnings.extend(tmpl_warnings)
 
-        # Cross-check variables between meta and template
+        # Cross-check variables between meta and template. Metadata supports both
+        # the concise ``variables: [name]`` form and mappings with type details.
         if meta_path.exists() and _YAML_AVAILABLE:
             meta_data = yaml.safe_load(meta_path.read_text(encoding="utf-8"))
-            meta_vars = {v["name"] for v in meta_data.get("variables", [])}
-            template_vars = self._extract_jinja2_variables(template_text)
-            missing_in_meta = template_vars - meta_vars
-            missing_in_template = meta_vars - template_vars
-            if missing_in_meta:
-                warnings.append(f"Variables used in template but not declared in meta: {missing_in_meta}")
-            if missing_in_template:
-                warnings.append(f"Variables declared in meta but not used in template: {missing_in_template}")
+            if isinstance(meta_data, dict) and isinstance(meta_data.get("variables", []), list):
+                meta_vars = self._variable_names(meta_data["variables"])
+                template_vars = self._extract_jinja2_variables(template_text)
+                missing_in_meta = template_vars - meta_vars
+                missing_in_template = meta_vars - template_vars
+                if missing_in_meta:
+                    warnings.append(f"Variables used in template but not declared in meta: {missing_in_meta}")
+                if missing_in_template:
+                    warnings.append(f"Variables declared in meta but not used in template: {missing_in_template}")
 
         valid = len(errors) == 0
         return ValidationResult(valid, errors, warnings, agent_id, prompt_type, version)
@@ -125,8 +127,12 @@ class PromptValidator:
             if len(variables) > self.MAX_VARIABLES:
                 errors.append(f"Too many variables: {len(variables)} > {self.MAX_VARIABLES}")
             for i, var in enumerate(variables):
+                if isinstance(var, str):
+                    if not var.strip():
+                        errors.append(f"Variable {i} must not be empty")
+                    continue
                 if not isinstance(var, dict):
-                    errors.append(f"Variable {i} must be a mapping")
+                    errors.append(f"Variable {i} must be a name or mapping")
                     continue
                 if "name" not in var:
                     errors.append(f"Variable {i} missing 'name'")
@@ -168,6 +174,14 @@ class PromptValidator:
                 break
 
         return errors, warnings
+
+    def _variable_names(self, variables: list[Any]) -> set[str]:
+        """Extract names from concise strings and expanded variable mappings."""
+        return {
+            var if isinstance(var, str) else var["name"]
+            for var in variables
+            if (isinstance(var, str) and var) or (isinstance(var, dict) and isinstance(var.get("name"), str))
+        }
 
     def _extract_jinja2_variables(self, template_text: str) -> set[str]:
         """Extract top-level Jinja2 variables from template text."""
