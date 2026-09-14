@@ -52,7 +52,7 @@ class DALLEAdapter(BaseProviderAdapter[dict[str, Any]]):
         return self.MODELS
 
     async def _execute(self, request: dict[str, Any]) -> dict[str, Any]:
-        if self._client is None:
+        if self._is_mock():
             return self._mock_execute(request)
 
         prompt = request.get("prompt", "")
@@ -91,7 +91,7 @@ class DALLEAdapter(BaseProviderAdapter[dict[str, Any]]):
         }
 
     async def _health_check_impl(self) -> bool:
-        if self._client is None:
+        if self._is_mock():
             return True
         try:
             # Reuse the OpenAI client models list

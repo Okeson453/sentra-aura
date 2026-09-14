@@ -111,6 +111,20 @@ class BaseProviderAdapter(ABC, Generic[T]):
     def circuit_state(self) -> str:
         return self._circuit.state
 
+    def _is_mock(self) -> bool:
+        """Return True when this adapter has no usable credential.
+
+        A provider must NEVER make a live network call without a credential.
+        Historically the mock fallback was selected by ``self._client is None``,
+        but ``httpx`` is a hard dependency, so the client was always built - with
+        ``api_key=None`` - and the adapter issued real billable requests to the
+        upstream provider. Mock mode is therefore keyed on the credential (or an
+        explicit ``config.mock_mode`` override), not on library availability.
+        """
+        if self.config.mock_mode is not None:
+            return bool(self.config.mock_mode)
+        return not self.config.api_key
+
     def supports(self, capability: ProviderCapability) -> bool:
         return capability in self.capabilities
 

@@ -21,6 +21,9 @@ class ProviderConfig:
     priority: int = 0
     rate_limit_rpm: int = 60
     extra_headers: dict[str, str] = field(default_factory=dict)
+    # Explicit mock-mode override. None means "derive from credential presence"
+    # (an adapter without an api_key must never make a live call).
+    mock_mode: bool | None = None
 
 
 @dataclass(frozen=True)
