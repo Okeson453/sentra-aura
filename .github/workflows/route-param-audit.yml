@@ -1,0 +1,50 @@
+# .github/workflows/route-param-audit.yml
+#
+# Dedicated static-analysis gate for a defect class FastAPI does not catch:
+# a route whose path template declares a parameter the handler never binds,
+# e.g.  @app.post("/render/jobs/{job_id}/cancel")
+#       async def cancel(job_id: str)   # <- before the fix: `job_id` was unbound
+#
+# Such a route imports cleanly, passes health checks, and raises NameError (or
+# silently calls with the wrong argument) only when a real request arrives.
+# The media-renderer cancel endpoint shipped in exactly this state.
+#
+# Kept as its own workflow so it runs independently of the 9-stage service
+# pipeline and does not need to touch it.
+
+name: Route Param Audit
+
+on:
+  pull_request:
+    branches: [main, 'release/**']
+    paths:
+      - 'services/**'
+      - 'packages/**'
+      - 'tools/path_param_audit.py'
+      - '.github/workflows/route-param-audit.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'services/**'
+      - 'packages/**'
+      - 'tools/path_param_audit.py'
+      - '.github/workflows/route-param-audit.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Route path parameters are bound
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Audit route path parameters
+        run: python tools/path_param_audit.py services packages
