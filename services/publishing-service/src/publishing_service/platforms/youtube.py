@@ -8,7 +8,6 @@ from __future__ import annotations
 import logging
 import os
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from google.oauth2.credentials import Credentials
@@ -22,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 class YouTubeAdapter:
     """Adapter for the YouTube Data API v3.
-    
+
     Fully implemented with actual google-api-python-client calls and OAuth2.
     """
 
@@ -31,7 +30,7 @@ class YouTubeAdapter:
     MAX_DESCRIPTION_LENGTH = 5000
     MAX_TAGS = 500
     TAG_MAX_LENGTH = 30
-    
+
     # YouTube category IDs
     CATEGORY_IDS = {
         "film_and_animation": "1",
@@ -94,12 +93,12 @@ class YouTubeAdapter:
         """Get OAuth2 credentials, using cached credentials if available."""
         if self._credentials is not None:
             return self._credentials
-        
+
         # Try to use OAuth token if provided
         if self.oauth_token:
             self._credentials = Credentials(token=self.oauth_token)
             return self._credentials
-        
+
         # Try to use client secrets file
         if self.client_secrets_path and os.path.exists(self.client_secrets_path):
             flow = InstalledAppFlow.from_client_secrets_file(
@@ -112,7 +111,7 @@ class YouTubeAdapter:
                 prompt="consent",
             )
             return self._credentials
-        
+
         raise RuntimeError(
             "No valid credentials found. "
             "Provide either oauth_token or client_secrets_path."
@@ -122,13 +121,13 @@ class YouTubeAdapter:
         """Get or create the YouTube API service."""
         if self._service is not None:
             return self._service
-        
+
         if self.api_key:
             self._service = build("youtube", "v3", developerKey=self.api_key)
         else:
             credentials = self._get_credentials()
             self._service = build("youtube", "v3", credentials=credentials)
-        
+
         return self._service
 
     def upload(
@@ -143,9 +142,9 @@ class YouTubeAdapter:
         thumbnail_path: str | None = None,
     ) -> dict[str, Any]:
         """Upload a video to YouTube.
-        
+
         Implements actual YouTube Data API v3 upload using google-api-python-client.
-        
+
         Args:
             video_path: Path to the video file to upload
             title: Video title (max 100 characters)
@@ -155,12 +154,12 @@ class YouTubeAdapter:
             privacy_status: "public", "private", or "unlisted"
             scheduled_at: ISO 8601 datetime string for scheduled publishing
             thumbnail_path: Path to thumbnail image file
-            
+
         Returns:
             dict with platform, video_id, status, and other metadata
         """
         self._require_credentials()
-        
+
         # Validate inputs
         if len(title) > self.MAX_TITLE_LENGTH:
             raise ValueError(f"Title exceeds maximum length of {self.MAX_TITLE_LENGTH} characters")
@@ -172,16 +171,16 @@ class YouTubeAdapter:
             for tag in tags:
                 if len(tag) > self.TAG_MAX_LENGTH:
                     raise ValueError(f"Tag exceeds maximum length of {self.TAG_MAX_LENGTH} characters")
-        
+
         if privacy_status not in ("public", "private", "unlisted"):
             raise ValueError(f"Invalid privacy_status: {privacy_status}. Must be 'public', 'private', or 'unlisted'")
-        
+
         # Verify video file exists
         if not os.path.exists(video_path):
             raise FileNotFoundError(f"Video file not found: {video_path}")
-        
+
         service = self._get_service()
-        
+
         # Build the video metadata
         body = {
             "snippet": {
@@ -194,14 +193,14 @@ class YouTubeAdapter:
                 "privacyStatus": privacy_status,
             },
         }
-        
+
         # Add scheduled publishing if specified
         if scheduled_at:
             body["status"]["publishAt"] = scheduled_at
-        
+
         # Create media file upload object
         media = MediaFileUpload(video_path, chunksize=-1, resumable=True)
-        
+
         try:
             # Execute the upload request
             request = service.videos().insert(
@@ -210,26 +209,29 @@ class YouTubeAdapter:
                 media_body=media,
             )
             response = request.execute()
-            
+
             video_id = response.get("id")
             if not video_id:
                 raise RuntimeError(f"Upload failed: No video ID returned. Response: {response}")
-            
+
             logger.info("Successfully uploaded video %s to YouTube: %s", video_id, title)
-            
-            # Upload thumbnail if provided
-            if thumbnail_path and os.path.exists(thumbnail_path):
+
+            # A requested thumbnail is part of the publication operation. Do not
+            # report full success if it was missing or YouTube rejected it.
+            if thumbnail_path:
+                if not os.path.exists(thumbnail_path):
+                    raise FileNotFoundError(f"Thumbnail file not found: {thumbnail_path}")
                 try:
                     thumbnail_media = MediaFileUpload(thumbnail_path)
                     thumbnail_request = service.thumbnails().set(
                         videoId=video_id,
                         media_body=thumbnail_media,
                     )
-                    thumbnail_response = thumbnail_request.execute()
+                    thumbnail_request.execute()
                     logger.info("Successfully uploaded thumbnail for video %s", video_id)
                 except HttpError as e:
-                    logger.warning("Failed to upload thumbnail for video %s: %s", video_id, str(e))
-            
+                    raise RuntimeError(f"YouTube thumbnail upload failed: {e}") from e
+
             return {
                 "platform": self.PLATFORM_ID,
                 "video_id": video_id,
@@ -239,7 +241,7 @@ class YouTubeAdapter:
                 "url": f"https://www.youtube.com/watch?v={video_id}",
                 "uploaded_at": datetime.utcnow().isoformat() + "Z",
             }
-            
+
         except HttpError as e:
             error_details = getattr(e, "_content", {})
             error_message = error_details.get("error", {}).get("message", str(e))
@@ -255,20 +257,20 @@ class YouTubeAdapter:
         category_id: str | None = None,
     ) -> dict[str, Any]:
         """Update video metadata on YouTube.
-        
+
         Args:
             video_id: YouTube video ID
             title: New title
             description: New description
             tags: New list of tags
             category_id: New category ID
-            
+
         Returns:
             dict with updated metadata
         """
         self._require_credentials()
         service = self._get_service()
-        
+
         # Get current snippet
         try:
             request = service.videos().list(
@@ -280,7 +282,7 @@ class YouTubeAdapter:
             current_snippet = current_video.get("snippet", {})
         except HttpError as e:
             raise RuntimeError(f"Failed to get current video metadata: {e}") from e
-        
+
         # Build update body
         body = {
             "id": video_id,
@@ -291,7 +293,7 @@ class YouTubeAdapter:
                 "categoryId": category_id if category_id is not None else current_snippet.get("categoryId", "22"),
             },
         }
-        
+
         try:
             request = service.videos().update(
                 part="snippet",
@@ -316,21 +318,21 @@ class YouTubeAdapter:
 
     def delete_video(self, video_id: str) -> dict[str, Any]:
         """Delete/unpublish a video from YouTube.
-        
+
         Args:
             video_id: YouTube video ID
-            
+
         Returns:
             dict with deletion status
         """
         self._require_credentials()
         service = self._get_service()
-        
+
         try:
             request = service.videos().delete(
                 id=video_id,
             )
-            response = request.execute()
+            request.execute()
             logger.info("Successfully deleted video %s", video_id)
             return {
                 "platform": self.PLATFORM_ID,
@@ -345,16 +347,16 @@ class YouTubeAdapter:
 
     def get_video_status(self, video_id: str) -> dict[str, Any]:
         """Get the processing and privacy status of a video.
-        
+
         Args:
             video_id: YouTube video ID
-            
+
         Returns:
             dict with video status information
         """
         self._require_credentials()
         service = self._get_service()
-        
+
         try:
             request = service.videos().list(
                 part="status,snippet,contentDetails",
@@ -362,7 +364,7 @@ class YouTubeAdapter:
             )
             response = request.execute()
             video = response.get("items", [{}])[0]
-            
+
             if not video:
                 return {
                     "platform": self.PLATFORM_ID,
@@ -370,11 +372,11 @@ class YouTubeAdapter:
                     "status": "not_found",
                     "error": "Video not found",
                 }
-            
+
             status = video.get("status", {})
             snippet = video.get("snippet", {})
             content_details = video.get("contentDetails", {})
-            
+
             return {
                 "platform": self.PLATFORM_ID,
                 "video_id": video_id,

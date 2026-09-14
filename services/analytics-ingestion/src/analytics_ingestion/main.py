@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from analytics_ingestion.config import config
 from analytics_ingestion.normalization import NormalizedMetrics, normalize_metrics, compute_performance_signal
 from analytics_ingestion.warehouse_writer import WarehouseWriter
-from analytics_ingestion.youtube_analytics_client import VideoMetrics, YouTubeAnalyticsClient
+from analytics_ingestion.youtube_analytics_client import YouTubeAnalyticsClient
 
 logger = logging.getLogger(__name__)
 writer = WarehouseWriter(
@@ -61,6 +61,7 @@ async def ingest_youtube_metrics(
         metrics = await yt_client.fetch_video_metrics(video_ids, channel_id)
         for m in metrics:
             await writer.write_metrics(m)
+        await writer.flush()
         return {
             "ingested": len(metrics),
             "channel_id": channel_id,
@@ -124,6 +125,7 @@ async def batch_ingest_youtube_metrics(
             metrics = await yt_client.fetch_video_metrics(video_ids, channel_id)
             for m in metrics:
                 await writer.write_metrics(m)
+            await writer.flush()
             total_ingested += len(metrics)
             channel_results[channel_id] = {"ingested": len(metrics), "requested": len(video_ids)}
         except Exception as exc:
