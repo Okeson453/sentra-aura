@@ -28,9 +28,16 @@ lint-typecheck:
   stage: lint-typecheck
   image: python:${PYTHON_VERSION}
   before_script:
-    - pip install ruff==0.6.3 mypy==1.11.0
-    - pip install -e ./packages/service-kit
-    - pip install -e ./packages/sentinel-exceptions
+    - pip install ruff==0.6.3 mypy==1.11.0 poetry-core
+    # Install EVERY workspace package first. Services declare their siblings by
+    # bare name ("service-kit", "sentinel-exceptions", ...); pip resolves the
+    # full graph when a service is installed, so each path dependency must
+    # already be registered or the service install fails with
+    # ResolutionImpossible. Ordering below respects inter-package depends-on.
+    - |
+      for pkg in sentinel-exceptions observability sentinel-security event-schemas event-bus service-kit agent-contracts provider-interfaces content-graph-client test-factory; do
+        pip install -e ./packages/$pkg
+      done
   script:
     - ruff check services/ packages/ --output-format=github
     - ruff format --check services/ packages/
@@ -63,6 +70,11 @@ unit-tests:
   image: python:${PYTHON_VERSION}
   needs: [lint-typecheck]
   parallel:
+    # Only services that actually own a Python test suite are in this matrix.
+    # agent-runtime has no package metadata (tests rely on the root pythonpath),
+    # and event-schema-registry / quota-broker are Go services, so listing them
+    # here made the stage fail with "file or directory not found" regardless of
+    # code health.
     matrix:
       - SERVICE:
           - control-plane-api
@@ -71,14 +83,11 @@ unit-tests:
           - content-graph-service
           - policy-engine
           - asset-store
-          - agent-runtime
           - provider-gateway
           - clipping-engine
           - media-renderer
           - research-service
           - analytics-ingestion
-          - event-schema-registry
-          - quota-broker
           - rights-registry-service
           - publishing-service
           - notification-service
@@ -86,18 +95,27 @@ unit-tests:
           - model-eval-service
           - billing-service
   before_script:
-    - pip install pytest pytest-asyncio pytest-cov httpx
+    - pip install pytest pytest-asyncio pytest-cov pytest-timeout httpx poetry-core
+    # Shared workspace packages first (see Stage 1) so the service's own path
+    # dependencies resolve instead of failing with ResolutionImpossible.
+    - |
+      for pkg in sentinel-exceptions observability sentinel-security event-schemas event-bus service-kit agent-contracts provider-interfaces content-graph-client test-factory; do
+        pip install -e ./packages/$pkg
+      done
     - |
       if [ -f "services/${SERVICE}/pyproject.toml" ]; then
         pip install -e ./services/${SERVICE}
       fi
-    - pip install -e ./packages/service-kit
-    - pip install -e ./packages/test-factory
   script:
-    - pytest services/${SERVICE}/tests/unit
+    # Run every test the service owns. Only 5 of 17 services keep tests under
+    # tests/unit/; the rest keep them directly under tests/, so the old hard-coded
+    # "tests/unit" path selected zero tests for most of the matrix.
+    # --timeout fails fast instead of hanging when infrastructure is absent.
+    - pytest services/${SERVICE}/tests
         --cov=services/${SERVICE}/src
         --cov-report=xml
         --cov-fail-under=85
+        --timeout=120
         -v
   artifacts:
     reports:

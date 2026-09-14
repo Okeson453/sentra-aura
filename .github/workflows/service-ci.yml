@@ -50,9 +50,12 @@ jobs:
 
       - name: Install lint tools
         run: |
-          pip install ruff==0.6.3 mypy==1.11.0
-          pip install -e ./packages/service-kit
-          pip install -e ./packages/sentinel-exceptions
+          pip install ruff==0.6.3 mypy==1.11.0 poetry-core
+          # Install EVERY workspace package first: services declare their siblings
+          # by bare name, and pip resolves the whole graph on service install.
+          for pkg in sentinel-exceptions observability sentinel-security event-schemas event-bus service-kit agent-contracts provider-interfaces content-graph-client test-factory; do
+            pip install -e ./packages/$pkg
+          done
 
       - name: Ruff check
         run: ruff check services/ packages/ --output-format=github
@@ -92,6 +95,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      # Only services owning a Python test suite. agent-runtime has no package
+      # metadata and event-schema-registry / quota-broker are Go services; listing
+      # them made the stage fail on a missing path regardless of code health.
       matrix:
         service:
           - control-plane-api
@@ -100,14 +106,11 @@ jobs:
           - content-graph-service
           - policy-engine
           - asset-store
-          - agent-runtime
           - provider-gateway
           - clipping-engine
           - media-renderer
           - research-service
           - analytics-ingestion
-          - event-schema-registry
-          - quota-broker
           - rights-registry-service
           - publishing-service
           - notification-service
@@ -125,19 +128,24 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install pytest pytest-asyncio pytest-cov httpx
+          pip install pytest pytest-asyncio pytest-cov pytest-timeout httpx poetry-core
+          # Shared workspace packages first so the service's own path deps resolve
+          # instead of raising ResolutionImpossible.
+          for pkg in sentinel-exceptions observability sentinel-security event-schemas event-bus service-kit agent-contracts provider-interfaces content-graph-client test-factory; do
+            pip install -e ./packages/$pkg
+          done
           if [ -f services/${{ matrix.service }}/pyproject.toml ]; then
             pip install -e ./services/${{ matrix.service }}
           fi
-          pip install -e ./packages/service-kit
-          pip install -e ./packages/test-factory
 
       - name: Run unit tests
         run: |
-          pytest services/${{ matrix.service }}/tests/unit \
+          # Run every test the service owns; tests/unit/ only exists for 5 services.
+          pytest services/${{ matrix.service }}/tests \
             --cov=services/${{ matrix.service }}/src \
             --cov-report=xml \
             --cov-fail-under=85 \
+            --timeout=120 \
             -v
 
       - name: Upload coverage
@@ -213,6 +221,8 @@ jobs:
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     strategy:
       fail-fast: false
+      # Only services that ship a Dockerfile. agent-runtime has none, so
+      # "docker build -f services/agent-runtime/Dockerfile" could never succeed.
       matrix:
         service:
           - control-plane-api
@@ -221,12 +231,12 @@ jobs:
           - content-graph-service
           - policy-engine
           - asset-store
-          - agent-runtime
           - provider-gateway
           - clipping-engine
           - media-renderer
           - research-service
           - analytics-ingestion
+          - rights-registry-service
           - publishing-service
           - notification-service
           - agent-registry-service
