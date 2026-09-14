@@ -84,7 +84,12 @@ class DriftMonitor:
 
         # Composite drift score
         drift_score = max(1.0 - ks_pvalue, cohens_d * 0.5, embedding_drift)
-        drift_detected = drift_score > self.drift_threshold
+        # Coerce to a builtin bool: the operands are numpy scalars, so a bare
+        # comparison yields ``np.bool_``. That propagates into DriftReport,
+        # where it (a) breaks ``jsonable_encoder`` with a TypeError - the drift
+        # API returned HTTP 500 - and (b) makes the field non-serialisable and
+        # non-identical to the ``True``/``False`` the contract promises.
+        drift_detected = bool(drift_score > self.drift_threshold)
 
         feature_drifts = {
             "ks_pvalue": round(float(ks_pvalue), 4),
