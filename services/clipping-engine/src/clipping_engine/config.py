@@ -36,6 +36,14 @@ class ServiceConfig(BaseSettings):
     max_request_size_mb: int = Field(default=50, ge=1, le=500, description="Max request size in MB")
     request_timeout_seconds: float = Field(default=30.0, ge=5.0, le=300.0, description="Request timeout")
     enable_metrics: bool = Field(default=True, description="Enable Prometheus metrics")
+    media_renderer_url: str = Field(
+        default="http://localhost:8081",
+        description="Base URL of the media-renderer service for real clip renders",
+    )
+    asset_store_url: str | None = Field(
+        default=None,
+        description="Optional asset-store base URL for signed output URLs",
+    )
 
     @model_validator(mode="after")
     def _reject_insecure_jwt_secret_in_production(self) -> "ServiceConfig":
