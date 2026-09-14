@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Virtualenvs / local tooling
+.venv/
+.civenv/
+venv/
+
+# Local runtime artifacts produced by tests and local runs
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment
+.env
+.env.local
