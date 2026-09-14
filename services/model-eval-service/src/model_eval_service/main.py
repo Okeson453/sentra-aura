@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query, status
+from fastapi import Body, FastAPI, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 
 from model_eval_service.config import config
@@ -270,7 +270,7 @@ async def run_benchmark(
     benchmark_name: str,
     agent_id: str = Query(..., description="Agent identifier"),
     version: str = Query(..., description="Agent version to evaluate"),
-    test_cases: list[dict[str, Any]] | None = None,
+    test_cases: list[dict[str, Any]] | None = Body(default=None),
 ) -> dict[str, Any]:
     """Run a specific quality benchmark against test cases.
 
@@ -387,16 +387,26 @@ async def run_all_benchmarks(
 async def set_drift_baseline(
     agent_id: str = Query(..., description="Agent identifier"),
     version: str = Query(..., description="Agent version"),
-    scores: list[float] = Query(..., description="Baseline score distribution"),
-    embeddings: list[list[float]] | None = None,
+    scores: list[float] = Body(..., description="Baseline score distribution"),
 ) -> dict[str, Any]:
     """Set the baseline distribution for drift detection.
 
     The baseline should represent the expected output distribution
     from a known-good version of the agent.
+
+    The score distribution is the raw JSON request body (a bare array of
+    floats), matching this service's committed contract tests. It is
+    deliberately the only body parameter: declaring a second one would make
+    FastAPI embed both under a JSON object instead.
+
+    NOTE: embeddings cannot be supplied here. They are ``list[list[float]]``
+    and FastAPI rejects that shape as a query parameter (AssertionError at
+    import time), which made this module unimportable. Restoring embedding-based
+    drift requires accepting a request model (a JSON body object) instead of a
+    bare score array - a deliberate API-contract change, not made here.
     """
     try:
-        drift_monitor.set_baseline(agent_id, version, scores, embeddings)
+        drift_monitor.set_baseline(agent_id, version, scores)
         return {
             "agent_id": agent_id,
             "version": version,
@@ -417,20 +427,21 @@ async def set_drift_baseline(
 async def detect_drift(
     agent_id: str = Query(..., description="Agent identifier"),
     version: str = Query(..., description="Agent version"),
-    current_scores: list[float] = Query(..., description="Current score distribution"),
-    current_embeddings: list[list[float]] | None = None,
+    current_scores: list[float] = Body(..., description="Current score distribution"),
 ) -> DriftReport:
     """Detect drift between baseline and current distributions.
 
-    Uses Kolmogorov-Smirnov test, Welch's t-test, and embedding
-    cosine distance to detect model degradation.
+    Uses Kolmogorov-Smirnov test and Welch's t-test to detect model
+    degradation. The current score distribution is the raw JSON request body
+    (a bare array of floats).
+
+    Embeddings are intentionally not accepted - see ``set_drift_baseline``.
     """
     try:
         return drift_monitor.detect_drift(
             agent_id=agent_id,
             version=version,
             current_scores=current_scores,
-            current_embeddings=current_embeddings,
         )
     except ValueError as exc:
         raise HTTPException(
@@ -443,23 +454,6 @@ async def detect_drift(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "DRIFT_DETECTION_FAILED", "message": str(exc)},
         )
-
-
-@app.get("/api/v1/drift/status/{agent_id}/{version}")
-async def get_drift_status(
-    agent_id: str,
-    version: str,
-) -> dict[str, Any]:
-    """Get current drift monitoring status for an agent version."""
-    key = f"{agent_id}:{version}"
-    has_baseline = key in drift_monitor._baselines
-    return {
-        "agent_id": agent_id,
-        "version": version,
-        "has_baseline": has_baseline,
-        "baseline_set_at": drift_monitor._baselines.get(key, {}).get("set_at").isoformat() if has_baseline else None,
-        "drift_threshold": drift_monitor.drift_threshold,
-    }
 
 
 @app.get("/api/v1/evaluations/{agent_id}")
