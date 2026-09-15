@@ -9,7 +9,7 @@ import hashlib
 from typing import Any
 
 from asset_store.models import Asset, ProvenanceRecord
-from asset_store.backend import StorageBackend, LocalStorageBackend
+from asset_store.backend import StorageBackend
 from asset_store.db_backend import DatabaseMetadataBackend
 from asset_store.virus_scanner import VirusScanner, SignatureScanner, ScanResult
 
@@ -26,7 +26,7 @@ class AssetStoreService:
         scanner: VirusScanner | None = None,
         metadata_backend: DatabaseMetadataBackend | None = None,
     ) -> None:
-        self.backend = backend or LocalStorageBackend()
+        self.backend = backend if backend is not None else _default_backend()
         self.scanner = scanner or SignatureScanner()
         self.metadata_backend = metadata_backend or DatabaseMetadataBackend(self.backend)
 

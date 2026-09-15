@@ -130,8 +130,8 @@ async def rate_limit(request: Request) -> None:
         )
 
 
-async def get_db_session() -> Generator[Session, None, None]:
-    """Synchronous DB session dependency."""
+def get_db_session() -> Generator[Session, None, None]:
+    """Synchronous DB session dependency (sync generator — not async)."""
     yield from get_db()
 
 

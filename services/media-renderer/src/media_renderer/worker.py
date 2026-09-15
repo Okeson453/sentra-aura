@@ -211,6 +211,47 @@ class RenderWorker:
         finally:
             db.close()
 
+    async def _publish_video_rendered(self, job: Any) -> None:
+        """Publish video_rendered via shared packages/event-bus (Architecture §4/§32)."""
+        import os
+        try:
+            from event_bus import create_event_publisher
+        except ImportError:
+            logger.debug("event_bus package not importable; skip publish")
+            return
+        mock = os.environ.get("NATS_MOCK_MODE", "true").lower() in ("1", "true", "yes")
+        nats_url = os.environ.get("NATS_URL", "nats://localhost:4222")
+        nc, publisher = await create_event_publisher(nats_url=nats_url, mock_mode=mock)
+        try:
+            event = {
+                "event_type": "video_rendered",
+                "job_id": getattr(job, "job_id", ""),
+                "channel_id": getattr(job, "channel_id", "") or "system",
+                "tenant_id": getattr(job, "tenant_id", "") or "system",
+                "output_url": getattr(job, "output_url", "") or "",
+                "status": "completed",
+            }
+            await publisher.publish(
+                event,
+                channel_id=event["channel_id"],
+                event_family="clip",
+                event_type="video_rendered",
+                schema_name="video_rendered.json",
+            )
+        except Exception as exc:
+            # Schema may reject incomplete payloads — still best-effort
+            logger.debug("video_rendered publish note: %s", exc)
+            try:
+                await publisher.publish_platform(event, event_type="video_rendered")
+            except Exception:
+                pass
+        finally:
+            try:
+                await nc.close()
+            except Exception:
+                pass
+
+
     async def process_job(
         self,
         job_id: str,

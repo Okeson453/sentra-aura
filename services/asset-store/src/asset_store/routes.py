@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 import io
 
 from asset_store.models import Asset, ProvenanceRecord
-from asset_store.backend import StorageBackend, LocalStorageBackend
+from asset_store.backend import StorageBackend
 from asset_store.db_backend import DatabaseMetadataBackend
 from asset_store.service import AssetStoreService
 from asset_store.virus_scanner import ClamAVScanner, SignatureScanner
@@ -27,8 +27,9 @@ router = APIRouter()
 
 
 def get_service() -> AssetStoreService:
-    # Use database backend by default
-    backend = LocalStorageBackend()
+    # Select object-storage backend from STORAGE_BACKEND (s3/gcs/azure/local)
+    from asset_store.backend_factory import create_storage_backend
+    backend = create_storage_backend()
     metadata_backend = DatabaseMetadataBackend(backend)
     return AssetStoreService(backend=backend, scanner=SignatureScanner(), metadata_backend=metadata_backend)
 

@@ -89,6 +89,49 @@ async def readiness_check(db: Session = Depends(get_db)) -> dict[str, Any]:
     }
 
 
+async def _publish_clip_candidates(
+    job_id: str,
+    video_id: str,
+    channel_id: str,
+    tenant_id: str,
+    candidates: list,
+) -> None:
+    """Publish clip_candidate_created via packages/event-bus (shared backbone)."""
+    import os
+    try:
+        from event_bus import create_event_publisher
+    except ImportError:
+        return
+    mock = os.environ.get("NATS_MOCK_MODE", "true").lower() in ("1", "true", "yes")
+    nats_url = os.environ.get("NATS_URL", getattr(config, "nats_url", None) or "nats://localhost:4222")
+    nc, publisher = await create_event_publisher(nats_url=nats_url, mock_mode=mock)
+    try:
+        event = {
+            "event_type": "clip_candidate_created",
+            "job_id": job_id,
+            "video_id": video_id,
+            "channel_id": channel_id or "system",
+            "tenant_id": tenant_id or "system",
+            "candidate_count": len(candidates or []),
+        }
+        try:
+            await publisher.publish(
+                event,
+                channel_id=event["channel_id"],
+                event_family="clip",
+                event_type="clip_candidate_created",
+                schema_name="clip_candidate_created.json",
+            )
+        except Exception:
+            await publisher.publish_platform(event, event_type="clip_candidate_created")
+    finally:
+        try:
+            await nc.close()
+        except Exception:
+            pass
+
+
+
 @app.post("/clips/detect")
 async def detect_clips(request: Request, authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
     """Detect and score clip candidates (Architecture §6 — engine owns ClipScore)."""
@@ -146,6 +189,11 @@ async def detect_clips(request: Request, authorization: str = Depends(_verify_be
     )
     db.add(job)
     db.commit()
+
+    try:
+        await _publish_clip_candidates(job_id, video_id, channel_id, tenant_id, candidates)
+    except Exception as pub_exc:
+        logger.warning("event-bus clip_candidate publish skipped: %s", pub_exc)
 
     return {
         "job_id": job_id,

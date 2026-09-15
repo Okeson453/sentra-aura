@@ -68,6 +68,36 @@ class NATSPublisher:
         """Return whether publishing is intentionally available."""
         return self.config.mock_mode or (self._connected and self._js is not None)
 
+    async def connect_via_event_bus(self) -> None:
+        """Prefer shared packages/event-bus connection (Architecture event backbone).
+
+        Falls back to legacy hand-rolled connect() if event_bus is unavailable.
+        """
+        if self.is_ready:
+            return
+        if self.config.mock_mode:
+            await self.connect()
+            return
+        try:
+            from event_bus.client import NATSClientConfig, connect_nats
+            cfg = NATSClientConfig(
+                servers=list(self.config.servers),
+                max_connect_attempts=self.config.max_connect_attempts,
+                connect_timeout_seconds=self.config.connect_timeout_seconds,
+                reconnect_wait_seconds=self.config.reconnect_wait_seconds,
+                stream_name=self.config.stream_name,
+                subjects=list(self.config.subjects),
+                mock_mode=False,
+            )
+            self._nc = await connect_nats(cfg)
+            self._js = self._nc.jetstream() if hasattr(self._nc, "jetstream") else None
+            self._connected = True
+            logger.info("NATS connected via packages/event-bus")
+        except Exception as exc:
+            logger.warning("event-bus connect failed (%s); falling back to legacy connect", exc)
+            await self.connect()
+
+
     async def connect(self) -> None:
         """Connect to NATS and initialize JetStream with bounded retries."""
         if self.is_ready:
