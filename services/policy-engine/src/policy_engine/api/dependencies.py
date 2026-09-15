@@ -1,12 +1,7 @@
-"""FastAPI dependencies for policy-engine.
-
-Provides DB sessions, auth, caching, rate limiting, and tenant resolution.
-Matches Architecture §3.1 and Backend Spec §3.
-"""
+"""FastAPI dependencies for policy-engine."""
 from __future__ import annotations
 
 from typing import Any, AsyncGenerator, Generator
-from functools import lru_cache
 
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -21,63 +16,67 @@ security = HTTPBearer(auto_error=False)
 
 
 async def get_current_tenant(request: Request) -> str:
-    """Resolve tenant from header, query param, or path."""
     tenant = (
         request.headers.get("X-Tenant-ID")
         or request.query_params.get("tenant_id")
         or request.path_params.get("tenant_id")
     )
     if not tenant:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Tenant ID required",
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Tenant ID required")
     if settings.allowed_tenants and tenant not in settings.allowed_tenants:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Tenant not authorized",
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant not authorized")
     return tenant
 
 
 async def get_current_channel(request: Request) -> str:
-    """Resolve channel from header, query param, or path."""
     channel = (
         request.headers.get("X-Channel-ID")
         or request.query_params.get("channel_id")
         or request.path_params.get("channel_id")
     )
     if not channel:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Channel ID required",
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Channel ID required")
     return channel
 
 
 async def verify_api_key(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
-) -> str:
-    """Verify API key from Authorization header."""
+) -> Any:
+    import hmac
+    from sentinel_security import authenticate_request, AuthContext
+    from sentinel_security.auth import AuthenticationError
+
     if not credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="API key required",
+            detail="Bearer token required",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    # In production: validate against secrets manager
-    if credentials.credentials != settings.jwt_secret:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API key",
-            headers={"WWW-Authenticate": "Bearer"},
+    token = credentials.credentials
+    try:
+        return authenticate_request(
+            token,
+            jwt_secret=settings.jwt_secret,
+            jwt_algorithms=[getattr(settings, "jwt_algorithm", "HS256")],
         )
-    return credentials.credentials
+    except AuthenticationError:
+        pass
+    expected = settings.jwt_secret or ""
+    if expected and hmac.compare_digest(token.encode("utf-8"), expected.encode("utf-8")):
+        return AuthContext(
+            subject="service:static-key",
+            subject_type="service",
+            roles=["service"],
+            claims={"auth_mode": "static_key"},
+        )
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 class RateLimiter:
-    """Simple in-memory rate limiter."""
-
     def __init__(self) -> None:
         self._requests: dict[str, list[float]] = {}
 
@@ -86,11 +85,8 @@ class RateLimiter:
         now = time.time()
         window = settings.rate_limit_window_seconds
         max_req = settings.rate_limit_requests
-
-        reqs = self._requests.get(key, [])
-        reqs = [r for r in reqs if now - r < window]
+        reqs = [r for r in self._requests.get(key, []) if now - r < window]
         self._requests[key] = reqs
-
         if len(reqs) >= max_req:
             return False
         reqs.append(now)
@@ -101,7 +97,6 @@ _rate_limiter = RateLimiter()
 
 
 async def rate_limit(request: Request) -> None:
-    """Rate limit dependency."""
     key = f"{request.client.host}:{request.url.path}"
     if not _rate_limiter.is_allowed(key):
         raise HTTPException(
@@ -112,19 +107,13 @@ async def rate_limit(request: Request) -> None:
 
 
 async def get_db_session() -> Generator[Session, None, None]:
-    """Synchronous DB session dependency."""
     yield from get_db()
 
 
 async def get_async_db_session() -> AsyncGenerator[AsyncSession, None]:
-    """Async DB session dependency."""
     async for session in get_async_db():
         yield session
 
 
 async def get_cache() -> Any:
-    """Return cache client if configured."""
-    if settings.redis_url:
-        # In production: return redis client
-        pass
     return None
