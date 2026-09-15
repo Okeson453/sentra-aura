@@ -30,6 +30,8 @@ class EventConsumer:
         self.max_deliver = max_deliver
         self.dlq_subject = dlq_subject
         self._handlers: dict[str, Handler] = {}
+        self._schema_names: dict[str, str | None] = {}
+        self._durable_names: dict[str, str | None] = {}
 
     def register(
         self,
@@ -41,7 +43,45 @@ class EventConsumer:
     ) -> None:
         """Register a handler for a subject pattern."""
         self._handlers[subject] = handler
-        # Subscription setup would happen here in real implementation
+        self._schema_names[subject] = schema_name
+        self._durable_names[subject] = durable_name
+
+    async def start_subscriptions(self) -> None:
+        """Bind registered handlers to the live NATS / JetStream client.
+
+        Call after ``register`` for each subject. Uses core NATS subscribe when
+        JetStream is unavailable; prefers JetStream durable consumers when
+        ``jetstream()`` is present on the client.
+        """
+        js = None
+        if hasattr(self.nats, "jetstream"):
+            try:
+                js = self.nats.jetstream()
+            except Exception:
+                js = None
+
+        for subject, handler in list(self._handlers.items()):
+            durable = self._durable_names.get(subject) or subject.replace(".", "_")[:48]
+
+            async def _cb(msg, _subject=subject):  # noqa: B023
+                payload = msg.data if hasattr(msg, "data") else msg
+                if isinstance(payload, memoryview):
+                    payload = payload.tobytes()
+                await self.handle_message(_subject, payload)
+                if hasattr(msg, "ack"):
+                    try:
+                        await msg.ack()
+                    except Exception:
+                        pass
+
+            if js is not None and hasattr(js, "subscribe"):
+                try:
+                    await js.subscribe(subject, cb=_cb, durable=durable)
+                    continue
+                except Exception:
+                    pass
+            if hasattr(self.nats, "subscribe"):
+                await self.nats.subscribe(subject, cb=_cb)
 
     async def handle_message(self, subject: str, payload: bytes) -> None:
         """Process a single message."""
@@ -53,7 +93,6 @@ class EventConsumer:
 
         handler = self._handlers.get(subject)
         if handler is None:
-            # Try wildcard match
             for pattern, h in self._handlers.items():
                 if self._match(subject, pattern):
                     handler = h
@@ -74,7 +113,7 @@ class EventConsumer:
             "original_subject": subject,
             "payload_b64": payload.decode("utf-8", errors="replace"),
             "failure_reason": reason,
-            "timestamp": "",  # Would be ISO timestamp
+            "timestamp": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
         }
         await self.nats.publish(self.dlq_subject, json.dumps(dlq_event).encode())
 

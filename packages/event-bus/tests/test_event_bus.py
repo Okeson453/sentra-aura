@@ -31,3 +31,23 @@ def test_validator_rejects_invalid():
     is_valid, errors = v.validate({"bad": "data"}, "trend_detected")
     assert not is_valid
     assert len(errors) > 0
+
+
+@pytest.mark.asyncio
+async def test_connect_nats_mock_mode():
+    from event_bus.client import connect_nats, NATSClientConfig, MockNATSClient
+
+    nc = await connect_nats(NATSClientConfig(mock_mode=True))
+    assert isinstance(nc, MockNATSClient)
+    await nc.publish("sentra.test.event", b'{"ok":true}')
+    assert len(nc.published) == 1
+    assert nc.published[0][0] == "sentra.test.event"
+
+
+@pytest.mark.asyncio
+async def test_create_event_publisher_mock():
+    from event_bus.client import create_event_publisher
+
+    nc, pub = await create_event_publisher(mock_mode=True)
+    assert nc is not None
+    assert pub is not None
