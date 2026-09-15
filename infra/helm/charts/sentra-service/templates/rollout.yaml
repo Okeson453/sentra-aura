@@ -1,0 +1,68 @@
+{{- if .Values.progressiveDelivery.enabled }}
+# Implements Backend Spec §8 / Appendix A.4 — progressive canary via Argo Rollouts
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: {{ include "sentra-service.fullname" . }}
+  labels:
+    {{- include "sentra-service.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount | default 1 }}
+  strategy:
+    canary:
+      analysis:
+        templates:
+          - templateName: {{ include "sentra-service.fullname" . }}-quality-analysis
+        args:
+          - name: service-name
+            value: {{ .Values.serviceName | default (include "sentra-service.fullname" .) }}
+      steps:
+        - setWeight: 5
+        - pause: { duration: {{ .Values.progressiveDelivery.pause5m | default "30m" }} }
+        - analysis:
+            templates:
+              - templateName: {{ include "sentra-service.fullname" . }}-quality-analysis
+        - setWeight: 25
+        - pause: { duration: {{ .Values.progressiveDelivery.pause25 | default "1h" }} }
+        - setWeight: 50
+        - pause: { duration: {{ .Values.progressiveDelivery.pause50 | default "2h" }} }
+        - setWeight: 100
+  selector:
+    matchLabels:
+      {{- include "sentra-service.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "sentra-service.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "sentra-service.serviceAccountName" . }}
+      containers:
+        - name: {{ .Values.serviceName | default (include "sentra-service.fullname" .) }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port | default 8000 }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: {{ include "sentra-service.fullname" . }}-quality-analysis
+spec:
+  args:
+    - name: service-name
+  metrics:
+    - name: error-rate
+      interval: 5m
+      successCondition: result < 0.05
+      failureLimit: 2
+      provider:
+        prometheus:
+          address: {{ .Values.progressiveDelivery.prometheusAddress | default "http://prometheus:9090" }}
+          query: |
+            sum(rate(http_requests_total{service="{{ "{{args.service-name}}" }}",status=~~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total{service="{{ "{{args.service-name}}" }}"}[5m]))
+{{- end }}

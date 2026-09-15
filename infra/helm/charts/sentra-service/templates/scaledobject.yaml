@@ -1,0 +1,21 @@
+{{- if .Values.autoscaling.keda.enabled }}
+# Implements Backend Spec §12.1 / Appendix A.5 — queue-depth autoscaling via KEDA
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "sentra-service.fullname" . }}-scaler
+  labels:
+    {{- include "sentra-service.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    name: {{ include "sentra-service.fullname" . }}
+  minReplicaCount: {{ .Values.autoscaling.minReplicas | default 1 }}
+  maxReplicaCount: {{ .Values.autoscaling.maxReplicas | default 10 }}
+  triggers:
+    - type: {{ .Values.autoscaling.keda.triggerType | default "nats-jetstream" }}
+      metadata:
+        natsServerMonitoringEndpoint: {{ .Values.autoscaling.keda.natsMonitoring | default "nats:8222" | quote }}
+        stream: {{ .Values.autoscaling.keda.stream | default "SENTRAURA_EVENTS" | quote }}
+        consumer: {{ printf "%s-consumer" (include "sentra-service.fullname" .) | quote }}
+        lagThreshold: {{ .Values.autoscaling.keda.lagThreshold | default "50" | quote }}
+{{- end }}
