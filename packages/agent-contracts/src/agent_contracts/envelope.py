@@ -7,7 +7,7 @@ Matches Architecture §4.1 and contracts/agent-messages/envelope.json.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 from uuid import UUID, uuid4
@@ -52,8 +52,8 @@ class AgentMessage:
     budget: CostBudget = field(default_factory=CostBudget)
     channel_id: str | None = None
     tenant_id: str | None = None
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    updated_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -77,20 +77,27 @@ class AgentMessage:
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "AgentMessage":
         from datetime import datetime as dt
+        from agent_contracts.budget import CostBudget as CB
+
+        def _uuid(val: Any) -> UUID | None:
+            if val is None:
+                return None
+            return UUID(str(val))
+
         return cls(
-            message_id=UUID(data.get("message_id", str(uuid4()))),
-            correlation_id=UUID(data.get("correlation_id", str(uuid4()))),
-            parent_workflow_id=UUID(data["parent_workflow_id"]) if data.get("parent_workflow_id") else None,
+            message_id=_uuid(data.get("message_id")) or uuid4(),
+            correlation_id=_uuid(data.get("correlation_id")) or uuid4(),
+            parent_workflow_id=_uuid(data.get("parent_workflow_id")),
             agent_type=data.get("agent_type", ""),
             task_type=data.get("task_type", ""),
-            payload=data.get("payload", {}),
-            state=data.get("state", {}),
+            payload=data.get("payload") or {},
+            state=data.get("state") or {},
             trace_id=data.get("trace_id", ""),
             deadline=dt.fromisoformat(data["deadline"]) if data.get("deadline") else None,
-            priority=PriorityLevel(data.get("priority", "NORMAL")),
-            budget=CostBudget.from_dict(data.get("budget", {})),
+            priority=PriorityLevel(data["priority"]) if data.get("priority") else PriorityLevel.NORMAL,
+            budget=CB.from_dict(data["budget"]) if data.get("budget") else CB(),
             channel_id=data.get("channel_id"),
             tenant_id=data.get("tenant_id"),
-            created_at=dt.fromisoformat(data["created_at"]) if data.get("created_at") else dt.utcnow(),
-            updated_at=dt.fromisoformat(data["updated_at"]) if data.get("updated_at") else dt.utcnow(),
+            created_at=dt.fromisoformat(data["created_at"]) if data.get("created_at") else dt.now(dt.timezone.utc),
+            updated_at=dt.fromisoformat(data["updated_at"]) if data.get("updated_at") else dt.now(dt.timezone.utc),
         )

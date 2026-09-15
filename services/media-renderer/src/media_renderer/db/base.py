@@ -5,7 +5,7 @@ Shared base, mixins, and utilities for database models.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, String, BigInteger, DateTime, Boolean, JSON, Integer, Float
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
@@ -23,8 +23,8 @@ def generate_short_id() -> str:
 class AuditMixin:
     """Mixin adding created_at, updated_at, created_by, updated_by columns."""
 
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
     created_by = Column(String(255), nullable=True)
     updated_by = Column(String(255), nullable=True)
 
