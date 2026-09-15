@@ -59,27 +59,35 @@ class RenderWorker:
         from media_renderer.db.models import RenderJobORM
         from sqlalchemy.orm import Session
         from datetime import datetime
-        
+
         db: Session = next(get_db())
         try:
             job = db.query(RenderJobORM).filter(
                 RenderJobORM.status == "queued"
             ).order_by(RenderJobORM.started_at.asc()).first()
-            
+
             if job:
                 logger.info("Found queued job: %s", job.job_id)
                 job.status = "processing"
                 job.progress_percent = 10
                 db.commit()
-                
+
                 try:
-                    await asyncio.sleep(0.5)
-                    job.status = "completed"
-                    job.progress_percent = 100
+                    # Refuse fabricated success URLs (P1-01). Real encode + asset-store
+                    # upload must set output_url; until then mark failed explicitly.
+                    await asyncio.sleep(0.1)
+                    job.status = "failed"
+                    job.progress_percent = 0
                     job.completed_at = datetime.utcnow()
-                    job.output_url = f"https://storage.sentraaura.com/renders/{job.job_id}/output.mp4"
+                    job.output_url = ""
+                    job.error_message = (
+                        "encode pipeline not yet producing real artifacts; "
+                        "refusing fabricated output_url"
+                    )
                     db.commit()
-                    logger.info("Job %s completed", job.job_id)
+                    logger.warning(
+                        "Job %s left failed until real encode is implemented", job.job_id
+                    )
                 except Exception as e:
                     job.status = "failed"
                     job.error_message = str(e)
@@ -90,7 +98,6 @@ class RenderWorker:
                 await asyncio.sleep(self.poll_interval)
         finally:
             db.close()
-
 
     async def process_job(
         self,
