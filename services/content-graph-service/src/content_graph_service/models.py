@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Column, String, Text, Integer, Float, DateTime, ForeignKey, JSON, create_engine
@@ -25,8 +25,8 @@ class ContentNode(Base):
     status = Column(String(20), default="ACTIVE")
     version = Column(Integer, default=1)
     payload = Column(JSON, default=dict)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     created_by = Column(String(255))
     updated_by = Column(String(255))
 
@@ -46,7 +46,11 @@ class ContentEdge(Base):
     tenant_id = Column(String(32), nullable=False, index=True)
     weight = Column(Float, default=1.0)
     metadata_json = Column(JSON, default=dict)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    # Bitemporal validity (Architecture §57) — policy-influenced edges
+    valid_from = Column(DateTime, nullable=True, index=True)
+    valid_to = Column(DateTime, nullable=True, index=True)
+    superseded_by = Column(String(36), nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     source = relationship("ContentNode", foreign_keys=[source_id], back_populates="outgoing_edges")
     target = relationship("ContentNode", foreign_keys=[target_id], back_populates="incoming_edges")
@@ -57,21 +61,13 @@ class LineageRecord(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     node_id = Column(String(36), ForeignKey("content_nodes.id"), nullable=False, index=True)
-    tenant_id = Column(String(32), nullable=False, index=True)
-    record_type = Column(String(50), nullable=False, index=True)
-    agent_id = Column(String(255))
-    action = Column(String(255))
-    inputs = Column(JSON, default=dict)
-    outputs = Column(JSON, default=dict)
-    metadata_json = Column(JSON, default=dict)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    action = Column(String(100), nullable=False)
+    actor = Column(String(255))
+    details = Column(JSON, default=dict)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     node = relationship("ContentNode", back_populates="lineage_records")
 
 
 def get_engine(database_url: str):
     return create_engine(database_url, poolclass=NullPool, echo=False)
-
-
-def get_sessionmaker(engine):
-    return sessionmaker(autocommit=False, autoflush=False, bind=engine)
