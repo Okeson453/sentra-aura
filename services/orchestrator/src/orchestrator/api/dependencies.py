@@ -6,7 +6,6 @@ Matches Architecture §3.1 and Backend Spec §3.
 from __future__ import annotations
 
 from typing import Any, AsyncGenerator, Generator
-from functools import lru_cache
 
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -57,22 +56,44 @@ async def get_current_channel(request: Request) -> str:
 
 async def verify_api_key(
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
-) -> str:
-    """Verify API key from Authorization header."""
+) -> Any:
+    """Verify Authorization bearer as JWT (preferred) or static service key.
+
+    P1-04 / P3-02: never treat a raw JWT secret as a static API key with ``!=``.
+    JWT path uses sentinel-security; static key path uses hmac.compare_digest.
+    """
+    import hmac
+    from sentinel_security import authenticate_request, AuthContext
+    from sentinel_security.auth import AuthenticationError
+
     if not credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="API key required",
+            detail="Bearer token required",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    # In production: validate against secrets manager
-    if credentials.credentials != settings.jwt_secret:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API key",
-            headers={"WWW-Authenticate": "Bearer"},
+    token = credentials.credentials
+    try:
+        return authenticate_request(
+            token,
+            jwt_secret=settings.jwt_secret,
+            jwt_algorithms=[getattr(settings, "jwt_algorithm", "HS256")],
         )
-    return credentials.credentials
+    except AuthenticationError:
+        pass
+    expected = settings.jwt_secret or ""
+    if expected and hmac.compare_digest(token.encode("utf-8"), expected.encode("utf-8")):
+        return AuthContext(
+            subject="service:static-key",
+            subject_type="service",
+            roles=["service"],
+            claims={"auth_mode": "static_key"},
+        )
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 class RateLimiter:
@@ -86,11 +107,9 @@ class RateLimiter:
         now = time.time()
         window = settings.rate_limit_window_seconds
         max_req = settings.rate_limit_requests
-
         reqs = self._requests.get(key, [])
         reqs = [r for r in reqs if now - r < window]
         self._requests[key] = reqs
-
         if len(reqs) >= max_req:
             return False
         reqs.append(now)
@@ -125,6 +144,5 @@ async def get_async_db_session() -> AsyncGenerator[AsyncSession, None]:
 async def get_cache() -> Any:
     """Return cache client if configured."""
     if settings.redis_url:
-        # In production: return redis client
         pass
     return None
