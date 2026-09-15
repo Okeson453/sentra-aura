@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import JSON, Column, DateTime, Float, Integer, String, Text, create_engine, inspect, text
 from sqlalchemy.engine import Engine
@@ -24,7 +24,7 @@ class ClipJob(Base):
     progress_percent = Column(Integer, default=0)
     candidates = Column(JSON, default=list)
     segment_count = Column(Integer, default=0)
-    started_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     completed_at = Column(DateTime)
     error_message = Column(Text)
     attempt_count = Column(Integer, nullable=False, default=0)
@@ -45,8 +45,8 @@ class Segment(Base):
     tags = Column(JSON, default=list)
     text = Column(Text, default="")
     metadata_json = Column(JSON, default=dict)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 class RenderJob(Base):
@@ -59,7 +59,7 @@ class RenderJob(Base):
     progress_percent = Column(Integer, default=0)
     output_url = Column(Text, default="")
     output_format = Column(String(50), default="mp4")
-    started_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     completed_at = Column(DateTime)
     error_message = Column(Text)
 
