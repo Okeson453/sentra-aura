@@ -44,7 +44,6 @@ async def lifespan(app: FastAPI):
 
 
 def _verify_bearer(authorization: str | None = Header(None)) -> AuthContext:
-    """Verify JWT token using sentinel-security."""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
     token = authorization[7:]
@@ -68,7 +67,6 @@ async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse
 
 @app.get("/health")
 async def health_check() -> dict[str, Any]:
-    """Health check."""
     return {
         "status": "healthy",
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -78,20 +76,16 @@ async def health_check() -> dict[str, Any]:
 
 @app.get("/ready")
 async def readiness_check(db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Readiness check."""
     try:
         db.execute(text("SELECT 1"))
         db_healthy = True
     except Exception:
         db_healthy = False
-
     return {
         "status": "healthy" if db_healthy else "unhealthy",
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "version": config.version,
-        "checks": {
-            "database": "healthy" if db_healthy else "unhealthy",
-        },
+        "checks": {"database": "healthy" if db_healthy else "unhealthy"},
     }
 
 
@@ -122,7 +116,15 @@ async def detect_clips(request: Request, authorization: str = Depends(_verify_be
             "visual_change": float(s.get("visual_change") or 0.0),
         })
 
-    scored = score_highlights(norm)
+    weights = None
+    raw_w = getattr(config, "clip_score_weights_json", "") or ""
+    if raw_w.strip():
+        try:
+            import json as _json
+            weights = _json.loads(raw_w)
+        except Exception:
+            weights = None
+    scored = score_highlights(norm, weights=weights)
     candidates = scored.get("scored_segments") or scored.get("candidates") or []
 
     for c in candidates:
@@ -160,11 +162,9 @@ async def detect_clips(request: Request, authorization: str = Depends(_verify_be
 
 @app.get("/clips/jobs/{job_id}")
 async def get_clip_job_status(job_id: str, authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Get clip detection job status."""
     job = db.query(ClipJob).filter(ClipJob.job_id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="job_id not found")
-
     return {
         "job_id": job.job_id,
         "status": job.status,
@@ -180,11 +180,9 @@ async def get_clip_job_status(job_id: str, authorization: str = Depends(_verify_
 
 @app.get("/clips/jobs/{job_id}/results")
 async def get_clip_job_results(job_id: str, authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Get clip detection results."""
     job = db.query(ClipJob).filter(ClipJob.job_id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="job_id not found")
-
     return {
         "job_id": job.job_id,
         "video_id": job.video_id,
@@ -197,7 +195,6 @@ async def get_clip_job_results(job_id: str, authorization: str = Depends(_verify
 
 @app.get("/clips/{clip_id}")
 async def get_clip(clip_id: str, authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Get clip by ID."""
     jobs = db.query(ClipJob).all()
     for job in jobs:
         for candidate in (job.candidates or []):
@@ -208,7 +205,6 @@ async def get_clip(clip_id: str, authorization: str = Depends(_verify_bearer), d
 
 @app.delete("/clips/{clip_id}")
 async def delete_clip(clip_id: str, authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> None:
-    """Delete a clip."""
     jobs = db.query(ClipJob).all()
     for job in jobs:
         for i, candidate in enumerate(job.candidates or []):
@@ -226,8 +222,6 @@ async def render_clip(clip_id: str, request: Request, authorization: str = Depen
     body = await request.json()
     job_id = f"render-{uuid.uuid4().hex[:12]}"
     video_id = body.get("video_id", "")
-    channel_id = body.get("channel_id", "")
-
     render_job = RenderJob(
         job_id=job_id,
         clip_id=clip_id,
@@ -239,14 +233,12 @@ async def render_clip(clip_id: str, request: Request, authorization: str = Depen
     )
     db.add(render_job)
     db.commit()
-
     dispatch_body = dict(body)
     if authorization:
         dispatch_body["_authorization"] = (
             authorization if authorization.startswith("Bearer ") else f"Bearer {authorization}"
         )
     asyncio.create_task(_process_render_job(db, job_id, clip_id, dispatch_body))
-
     return {
         "job_id": job_id,
         "clip_id": clip_id,
@@ -259,9 +251,7 @@ async def render_clip(clip_id: str, request: Request, authorization: str = Depen
 
 
 async def _process_render_job(db: Session, job_id: str, clip_id: str, body: dict) -> None:
-    """Dispatch to media-renderer. On failure leave status failed — never invent output_url."""
     from clipping_engine.config import ServiceConfig
-
     cfg = ServiceConfig()
     render_job = db.query(RenderJob).filter(RenderJob.job_id == job_id).first()
     if not render_job:
@@ -270,7 +260,6 @@ async def _process_render_job(db: Session, job_id: str, clip_id: str, body: dict
         render_job.status = "processing"
         render_job.progress_percent = 10
         db.commit()
-
         payload = {
             "job_id": job_id,
             "clip_id": clip_id,
@@ -285,17 +274,14 @@ async def _process_render_job(db: Session, job_id: str, clip_id: str, body: dict
         auth = body.get("_authorization")
         if auth:
             headers["Authorization"] = str(auth)
-
         async with httpx.AsyncClient(timeout=cfg.request_timeout_seconds) as client:
             resp = await client.post(url, json=payload, headers=headers)
-
         if resp.status_code >= 400:
             render_job.status = "failed"
             render_job.error_message = f"media-renderer HTTP {resp.status_code}: {resp.text[:500]}"
             render_job.completed_at = datetime.utcnow()
             db.commit()
             return
-
         data = resp.json() if resp.content else {}
         out = data.get("output_url") or (data.get("result") or {}).get("output_url") or ""
         status = data.get("status", "completed")
@@ -305,7 +291,6 @@ async def _process_render_job(db: Session, job_id: str, clip_id: str, body: dict
             render_job.completed_at = datetime.utcnow()
             db.commit()
             return
-
         render_job.status = status if status in ("queued", "processing", "completed", "failed") else "completed"
         render_job.progress_percent = int(data.get("progress_percent") or (100 if out else 50))
         render_job.output_url = out
@@ -325,9 +310,7 @@ async def _process_render_job(db: Session, job_id: str, clip_id: str, body: dict
 
 @app.post("/clips/{clip_id}/score")
 async def score_clip(clip_id: str, request: Request, authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Score a clip for virality/engagement potential using stored engine scores."""
     body = await request.json()
-
     jobs = db.query(ClipJob).all()
     clip_data = None
     for job in jobs:
@@ -337,13 +320,10 @@ async def score_clip(clip_id: str, request: Request, authorization: str = Depend
                 break
         if clip_data:
             break
-
     if not clip_data:
         raise HTTPException(status_code=404, detail="clip_id not found")
-
     scores = clip_data.get("scores", {})
     composite = clip_data.get("composite", 0.0)
-
     return {
         "clip_id": clip_id,
         "overall_score": round(composite, 4),
@@ -357,7 +337,6 @@ async def score_clip(clip_id: str, request: Request, authorization: str = Depend
 
 @app.post("/segments")
 async def create_segment(request: Request, authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Create a manual segment and persist it (Architecture §6)."""
     body = await request.json()
     video_id = (body.get("video_id") or "").strip()
     if not video_id:
@@ -403,12 +382,9 @@ async def create_segment(request: Request, authorization: str = Depends(_verify_
 
 
 async def _run_perception_pipeline(video_path: str | None, audio_path: str | None) -> list[dict[str, Any]]:
-    """Run the full perception pipeline to generate segments from video/audio."""
     import os
     import tempfile
-
     segments = []
-
     if video_path:
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_audio:
             audio_path = tmp_audio.name
@@ -417,7 +393,6 @@ async def _run_perception_pipeline(video_path: str | None, audio_path: str | Non
         except Exception as e:
             logger.warning("Audio extraction failed: %s", e)
             audio_path = None
-
     if audio_path and os.path.exists(audio_path):
         asr_result = transcribe_audio(audio_path)
         transcript_segments = asr_result.get("segments", [])
@@ -426,7 +401,6 @@ async def _run_perception_pipeline(video_path: str | None, audio_path: str | Non
         detect_scenes(video_path or audio_path)
         semantic_result = segment_semantically(transcript_segments)
         semantic_segments = semantic_result.get("semantic_segments", [])
-
         for i, seg in enumerate(semantic_segments):
             segments.append({
                 "segment_id": seg.get("segment_id", f"seg-{i}"),
@@ -435,13 +409,11 @@ async def _run_perception_pipeline(video_path: str | None, audio_path: str | Non
                 "text": seg.get("text", ""),
                 "visual_change": 0.5,
             })
-
         if audio_path and os.path.exists(audio_path):
             try:
                 os.unlink(audio_path)
             except Exception:
                 pass
-
     return segments
 
 if __name__ == "__main__":
