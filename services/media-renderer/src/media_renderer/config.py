@@ -36,6 +36,13 @@ class ServiceConfig(BaseSettings):
     max_request_size_mb: int = Field(default=50, ge=1, le=500, description="Max request size in MB")
     request_timeout_seconds: float = Field(default=30.0, ge=5.0, le=300.0, description="Request timeout")
     enable_metrics: bool = Field(default=True, description="Enable Prometheus metrics")
+    asset_store_url: str = Field(
+        default="http://asset-store:8080",
+        description="Base URL of asset-store for uploading encode artifacts",
+    )
+    asset_store_timeout_seconds: float = Field(
+        default=60.0, ge=5.0, le=600.0, description="HTTP timeout for asset-store upload"
+    )
 
     @model_validator(mode="after")
     def _reject_insecure_jwt_secret_in_production(self) -> "ServiceConfig":

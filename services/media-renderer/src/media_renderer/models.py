@@ -19,6 +19,10 @@ class RenderRequest(BaseModel):
     frame_rate: int = Field(default=30, ge=1, le=120)
     template_id: str | None = Field(default=None)
     callback_url: str | None = Field(default=None)
+    source_path: str | None = Field(default=None, max_length=1024)
+    edl: dict[str, Any] | None = Field(default=None)
+    profile_name: str | None = Field(default="youtube_1080p", max_length=64)
+    metadata: dict[str, Any] | None = Field(default=None)
 
 
 class TranscodeRequest(BaseModel):

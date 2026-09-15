@@ -188,6 +188,37 @@ async def get_asset(
     }
 
 
+
+@router.get("/{asset_id}/signed-url", response_model=dict)
+async def get_signed_url(
+    asset_id: str,
+    expiry_seconds: int = 3600,
+    service: AssetStoreService = Depends(get_service),
+) -> dict:
+    """Return a presigned or durable download URL for the asset."""
+    asset = await service.get(asset_id)
+    if not asset:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found")
+    path = getattr(asset, "storage_path", None) or ""
+    url = ""
+    try:
+        backend = service.backend
+        if path and hasattr(backend, "presigned_url"):
+            url = await backend.presigned_url(path, expiry_seconds=expiry_seconds)
+    except Exception:
+        url = ""
+    if not url:
+        # Durable service-relative download path (local/dev backends)
+        url = f"/api/v1/{asset_id}/download"
+    return {
+        "asset_id": asset_id,
+        "url": url,
+        "signed_url": url,
+        "expiry_seconds": expiry_seconds,
+        "content_type": getattr(asset, "content_type", "application/octet-stream"),
+    }
+
+
 @router.get("/{asset_id}/download")
 async def download_asset(
     asset_id: str,

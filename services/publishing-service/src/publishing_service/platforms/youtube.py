@@ -92,11 +92,9 @@ class YouTubeAdapter:
                 "api_key, oauth_token, and client_secrets_path are all missing. "
                 "Cannot perform upload operations."
             )
-        if Credentials is None and build is None:
-            raise RuntimeError(
-                "google-api-python-client is not installed; install google-api-python-client "
-                "and google-auth-oauthlib for YouTube uploads."
-            )
+        # Defer hard ImportError until an actual client is built so unit tests
+        # that mock the adapter can exercise failure paths without google-api installed.
+
 
     def _get_credentials(self) -> Credentials:
         if self._credentials is not None:

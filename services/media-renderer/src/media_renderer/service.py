@@ -92,6 +92,10 @@ class MediaRendererService:
                 timeline_clips=0,
                 template_id=request.template_id,
                 callback_url=request.callback_url,
+                source_path=request.source_path,
+                edl_json=request.edl,
+                profile_name=request.profile_name or "youtube_1080p",
+                metadata_json=request.metadata,
                 created_by=request.channel_id,
                 updated_by=request.channel_id,
             )

@@ -32,6 +32,11 @@ class RenderJobORM(Base, AuditMixin, TenantMixin, SoftDeleteMixin):
     timeline_clips = Column(Integer, nullable=False, default=0)
     template_id = Column(String(64), nullable=True)
     callback_url = Column(String(512), nullable=True)
+    # Inputs required for real encode path (worker fail-closed without these)
+    source_path = Column(String(1024), nullable=True)
+    edl_json = Column(JSON, nullable=True)
+    profile_name = Column(String(64), nullable=True, default="youtube_1080p")
+    metadata_json = Column(JSON, nullable=True)
 
 
 class TranscodeJobORM(Base, AuditMixin, TenantMixin, SoftDeleteMixin):
@@ -85,6 +90,10 @@ def orm_to_model_render_job(orm: RenderJobORM) -> dict[str, Any]:
         "timeline_clips": orm.timeline_clips,
         "template_id": orm.template_id,
         "callback_url": orm.callback_url,
+        "source_path": orm.source_path or "",
+        "edl_json": orm.edl_json,
+        "profile_name": orm.profile_name or "youtube_1080p",
+        "metadata_json": orm.metadata_json,
     }
 
 

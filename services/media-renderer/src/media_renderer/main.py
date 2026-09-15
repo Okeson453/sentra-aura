@@ -119,15 +119,28 @@ async def submit_render_job(request: Request, authorization: str = Depends(_veri
 
     # Create the job in database via service
     from media_renderer.models import RenderRequest
+    edl = body.get("edl") or body.get("timeline") or body.get("source", {}).get("edl")
+    if isinstance(edl, list):
+        edl = {"timeline": edl}
+    source_path = (
+        body.get("source_path")
+        or (body.get("source") or {}).get("path")
+        or (body.get("source") or {}).get("source_path")
+        or ""
+    )
     render_request = RenderRequest(
         project_id=body.get("project_id", ""),
         channel_id=body.get("channel_id", ""),
         tenant_id=body.get("tenant_id", ""),
-        output_format=body.get("format") or "mp4",
+        output_format=body.get("format") or body.get("output_format") or "mp4",
         resolution=body.get("resolution", "1080p"),
         frame_rate=body.get("frame_rate", 30),
         template_id=body.get("template_id"),
         callback_url=body.get("callback_url"),
+        source_path=source_path or None,
+        edl=edl if isinstance(edl, dict) else None,
+        profile_name=body.get("profile_name") or "youtube_1080p",
+        metadata=body.get("metadata"),
     )
     job = await svc.create_render_job(render_request)
 

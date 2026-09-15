@@ -260,14 +260,20 @@ async def _process_render_job(db: Session, job_id: str, clip_id: str, body: dict
         render_job.status = "processing"
         render_job.progress_percent = 10
         db.commit()
+        source = body.get("source") or {}
         payload = {
             "job_id": job_id,
             "clip_id": clip_id,
-            "video_id": body.get("video_id") or render_job.video_id,
+            "video_id": body.get("video_id") or getattr(render_job, "video_id", None),
             "channel_id": body.get("channel_id", ""),
+            "tenant_id": body.get("tenant_id", ""),
+            "project_id": body.get("project_id", ""),
             "output_format": body.get("output_format", "mp4"),
             "resolution": body.get("resolution", "1080p"),
-            "source": body.get("source") or {},
+            "source": source,
+            "source_path": body.get("source_path") or source.get("path") or source.get("source_path") or "",
+            "edl": body.get("edl") or source.get("edl") or body.get("timeline"),
+            "profile_name": body.get("profile_name") or "youtube_1080p",
         }
         url = cfg.media_renderer_url.rstrip("/") + "/render"
         headers: dict[str, str] = {}
