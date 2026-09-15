@@ -16,6 +16,24 @@ with workflow.unsafe.imports_passed_through():
     from orchestrator.scheduler import DAGScheduler
 
 
+def _require_activity_ok(name: str, result: dict[str, Any] | Any) -> dict[str, Any]:
+    """Raise if an activity reported failure without throwing (P1-05).
+
+    Temporal only fails the workflow when the activity raises. Activities that
+    return ``{"status": "failed"}`` would otherwise leave LongFormVideoWorkflow
+    reporting COMPLETED with a broken pipeline.
+    """
+    if not isinstance(result, dict):
+        return {"value": result}
+    status = str(result.get("status") or "").lower()
+    if status in ("failed", "error", "cancelled"):
+        raise RuntimeError(
+            f"activity {name} returned status={status}: "
+            f"{result.get('error') or result.get('error_message') or result}"
+        )
+    return result
+
+
 @workflow.defn
 class AgentWorkflow:
     """Generic workflow that executes a DAG of agent tasks."""
@@ -25,21 +43,18 @@ class AgentWorkflow:
         execution.state = WorkflowState.RUNNING
         scheduler = DAGScheduler()
 
-        # Validate DAG
         cycle = scheduler.detect_cycles(execution.tasks)
         if cycle:
             execution.state = WorkflowState.FAILED
             execution.error = f"Cycle detected: {' -> '.join(cycle)}"
             return execution.__dict__
 
-        # Execute tasks in topological order
         order = scheduler.topological_sort(execution.tasks)
         for task_id in order:
             task = execution.tasks[task_id]
             if task.state != TaskState.PENDING:
                 continue
 
-            # Check if dependencies completed
             deps_ready = all(
                 execution.tasks.get(dep, TaskNode(task_id=dep, task_type="", agent_type="")).state == TaskState.COMPLETED
                 for dep in task.dependencies
@@ -48,7 +63,6 @@ class AgentWorkflow:
                 task.state = TaskState.SKIPPED
                 continue
 
-            # Execute task activity
             try:
                 task.state = TaskState.STARTED
                 result = await workflow.execute_activity(
@@ -64,10 +78,6 @@ class AgentWorkflow:
                 task.outputs = result
                 task.state = TaskState.COMPLETED
             except Exception as exc:
-                # An activity that exhausted its retries must fail the workflow
-                # deterministically here. Falling through would leave the outcome
-                # to the tail-check and let downstream stages observe a silently
-                # partial execution.
                 task.state = TaskState.FAILED
                 task.error = str(exc)
                 task.retries += 1
@@ -87,7 +97,7 @@ class AgentWorkflow:
 @workflow.defn
 class LongFormVideoWorkflow:
     """Workflow for complete long-form video production and autonomous loop.
-    
+
     Implements: Discover -> Create -> Produce -> Clip -> Publish -> Measure -> Learn -> Optimize
     Matches Architecture §1 Core Operating Loop.
     """
@@ -96,7 +106,7 @@ class LongFormVideoWorkflow:
     async def run(self, params: dict[str, Any]) -> dict[str, Any]:
         channel_id = params["channel_id"]
         topic = params["topic"]
-        workflow_id = params.get("workflow_id", workflow.uuid_of(self.run_id))
+        workflow_id = params.get("workflow_id", workflow.uuid4() if hasattr(workflow, "uuid4") else str(workflow.info().workflow_id))
 
         results: dict[str, Any] = {
             "channel_id": channel_id,
@@ -104,71 +114,63 @@ class LongFormVideoWorkflow:
             "workflow_id": workflow_id,
         }
 
-        # Step 1: Research (Discover)
         research = await workflow.execute_activity(
             "research_topic",
             args=(channel_id, topic),
             start_to_close_timeout=timedelta(minutes=15),
             retry_policy=RetryPolicy(maximum_attempts=3),
         )
-        results["research"] = research
+        results["research"] = _require_activity_ok("research_topic", research)
 
-        # Step 2: Draft script (Create)
         script = await workflow.execute_activity(
             "draft_script",
             args=(channel_id, research),
             start_to_close_timeout=timedelta(minutes=15),
             retry_policy=RetryPolicy(maximum_attempts=3),
         )
-        results["script"] = script
+        results["script"] = _require_activity_ok("draft_script", script)
 
-        # Step 3: Produce voice (Produce)
         voice = await workflow.execute_activity(
             "produce_voice",
             args=(channel_id, script),
             start_to_close_timeout=timedelta(minutes=20),
             retry_policy=RetryPolicy(maximum_attempts=3),
         )
-        results["voice"] = voice
+        results["voice"] = _require_activity_ok("produce_voice", voice)
 
-        # Step 4: Generate visuals (Produce)
         visuals = await workflow.execute_activity(
             "generate_visuals",
             args=(channel_id, script),
             start_to_close_timeout=timedelta(minutes=30),
             retry_policy=RetryPolicy(maximum_attempts=3),
         )
-        results["visuals"] = visuals
+        results["visuals"] = _require_activity_ok("generate_visuals", visuals)
 
-        # Step 5: Render video (Produce)
         video = await workflow.execute_activity(
             "render_video",
             args=(channel_id, script, voice, visuals),
             start_to_close_timeout=timedelta(minutes=30),
             retry_policy=RetryPolicy(maximum_attempts=2),
         )
-        results["video"] = video
+        results["video"] = _require_activity_ok("render_video", video)
 
-        # Step 6: Clip generation (Clip)
-        # Use the real clipping engine instead of stub
         clips = await workflow.execute_activity(
             "generate_clips",
             args=(channel_id, video.get("video_id"), script),
             start_to_close_timeout=timedelta(minutes=45),
             retry_policy=RetryPolicy(maximum_attempts=2),
         )
-        results["clips"] = clips
+        results["clips"] = _require_activity_ok("generate_clips", clips)
 
-        # Step 7: Package and publish (Publish)
         publish_result = await workflow.execute_activity(
             "publish_content",
             args=(channel_id, video.get("video_id"), clips, script),
             start_to_close_timeout=timedelta(minutes=30),
             retry_policy=RetryPolicy(maximum_attempts=2),
         )
+        publish_result = _require_activity_ok("publish_content", publish_result)
         results["publish"] = publish_result
 
-        # Step 8: Record analytics (Measure)
         analytics_result = await workflow.execute_activity(
             "record_analytics",
             args=(channel_id, video.get("video_id"), publish_result, clips),
@@ -177,7 +179,6 @@ class LongFormVideoWorkflow:
         )
         results["analytics"] = analytics_result
 
-        # Step 9: Update learning models (Learn)
         learning_result = await workflow.execute_activity(
             "update_learning",
             args=(channel_id, video.get("video_id"), analytics_result, clips),
@@ -186,7 +187,6 @@ class LongFormVideoWorkflow:
         )
         results["learning"] = learning_result
 
-        # Step 10: Optimize policy (Optimize)
         optimize_result = await workflow.execute_activity(
             "optimize_policy",
             args=(channel_id, learning_result, analytics_result),
@@ -195,23 +195,21 @@ class LongFormVideoWorkflow:
         )
         results["optimize"] = optimize_result
 
-        # Complete the autonomous loop
+        published = (
+            publish_result.get("status") == "completed"
+            and bool(publish_result.get("video_publication_id"))
+        )
         return {
             **results,
             "channel_id": channel_id,
             "topic": topic,
-            "video_id": video.get("video_id"),
-            "clip_count": len(clips.get("candidates", [])),
-            "published": publish_result.get("status") == "completed"
-            and bool(publish_result.get("video_publication_id")),
-            "status": "COMPLETED",
+            "video_id": (video or {}).get("video_id") if isinstance(video, dict) else None,
+            "clip_count": len((clips or {}).get("candidates", [])) if isinstance(clips, dict) else 0,
+            "published": published,
+            "status": "COMPLETED" if published else "COMPLETED_WITH_WARNINGS",
             "loop_complete": True,
         }
 
-
-# ---------------------------------------------------------------------------
-# In-process workflow helpers for unit/crash-recovery tests (no Temporal worker)
-# ---------------------------------------------------------------------------
 
 class InProcessAgentWorkflow:
     """Lightweight agent workflow with explicit state machine for tests."""
@@ -256,7 +254,6 @@ class InProcessLongFormVideoWorkflow:
         return {"stages": list(self.completed_stages), "checkpoints": len(self.checkpoints)}
 
 
-# Back-compat aliases some tests import
 try:
     AgentWorkflow  # noqa: F401
 except NameError:
