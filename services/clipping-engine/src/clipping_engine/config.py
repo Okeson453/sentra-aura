@@ -36,6 +36,10 @@ class ServiceConfig(BaseSettings):
     max_request_size_mb: int = Field(default=50, ge=1, le=500, description="Max request size in MB")
     request_timeout_seconds: float = Field(default=30.0, ge=5.0, le=300.0, description="Request timeout")
     enable_metrics: bool = Field(default=True, description="Enable Prometheus metrics")
+
+    # Architecture §6 / §25 — optional override of ClipScore DEFAULT_WEIGHTS (JSON object)
+    clip_score_weights_json: str = Field(default="", alias="CLIP_SCORE_WEIGHTS_JSON")
+
     media_renderer_url: str = Field(
         default="http://localhost:8081",
         description="Base URL of the media-renderer service for real clip renders",
@@ -47,9 +51,6 @@ class ServiceConfig(BaseSettings):
 
     @model_validator(mode="after")
     def _reject_insecure_jwt_secret_in_production(self) -> "ServiceConfig":
-        # Fail closed when running in production-ish mode. A repository-visible
-        # shared signing key lets any caller mint valid JWTs and bypass auth
-        # entirely (CWE-1188 / CWE-798). Dev/test keep working on the default.
         if self.is_production and (
             self.jwt_secret in _INSECURE_JWT_DEFAULTS or len(self.jwt_secret) < 32
         ):

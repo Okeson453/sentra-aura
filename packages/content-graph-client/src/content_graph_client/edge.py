@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 from uuid import UUID, uuid4
@@ -13,52 +13,42 @@ class ContentEdgeType(str, Enum):
     RENDERED_FROM = "RENDERED_FROM"
     CLIPPED_FROM = "CLIPPED_FROM"
     THUMBNAIL_FOR = "THUMBNAIL_FOR"
-    METADATA_FOR = "METADATA_FOR"
     PUBLISHED_AS = "PUBLISHED_AS"
-    PERFORMANCE_OF = "PERFORMANCE_OF"
+    OPTIMIZED_BY = "OPTIMIZED_BY"
+    MEASURED_BY = "MEASURED_BY"
+    AB_TESTED_WITH = "AB_TESTED_WITH"
     DERIVED_FROM = "DERIVED_FROM"
-    EXPERIMENT_ON = "EXPERIMENT_ON"
-    POLICY_FOR = "POLICY_FOR"
-    AUDIT_OF = "AUDIT_OF"
 
 
 @dataclass
 class ContentEdge:
-    """An edge in the Content Asset Graph."""
+    """Directed edge in the Content Asset Graph (Architecture §5 / §57)."""
+
     edge_id: UUID = field(default_factory=uuid4)
     source_id: UUID = field(default_factory=uuid4)
     target_id: UUID = field(default_factory=uuid4)
-    edge_type: ContentEdgeType = ContentEdgeType.DERIVED_FROM
+    edge_type: ContentEdgeType | str = ContentEdgeType.DERIVED_FROM
     channel_id: str = ""
     tenant_id: str = ""
     weight: float = 1.0
+    valid_from: datetime | None = None
+    valid_to: datetime | None = None
+    superseded_by: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "edge_id": str(self.edge_id),
             "source_id": str(self.source_id),
             "target_id": str(self.target_id),
-            "edge_type": self.edge_type.value,
+            "edge_type": self.edge_type.value if isinstance(self.edge_type, Enum) else str(self.edge_type),
             "channel_id": self.channel_id,
             "tenant_id": self.tenant_id,
             "weight": self.weight,
+            "valid_from": self.valid_from.isoformat() if self.valid_from else None,
+            "valid_to": self.valid_to.isoformat() if self.valid_to else None,
+            "superseded_by": self.superseded_by,
             "metadata": self.metadata,
             "created_at": self.created_at.isoformat(),
         }
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ContentEdge":
-        from datetime import datetime as dt
-        return cls(
-            edge_id=UUID(data.get("edge_id", str(uuid4()))),
-            source_id=UUID(data["source_id"]) if data.get("source_id") else uuid4(),
-            target_id=UUID(data["target_id"]) if data.get("target_id") else uuid4(),
-            edge_type=ContentEdgeType(data.get("edge_type", "DERIVED_FROM")),
-            channel_id=data.get("channel_id", ""),
-            tenant_id=data.get("tenant_id", ""),
-            weight=data.get("weight", 1.0),
-            metadata=data.get("metadata", {}),
-            created_at=dt.fromisoformat(data["created_at"]) if data.get("created_at") else dt.utcnow(),
-        )
