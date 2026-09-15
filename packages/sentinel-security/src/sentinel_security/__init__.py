@@ -12,6 +12,7 @@ from sentinel_security.tenant import (
     resolve_tenant_id,
     validate_tenant_id,
 )
+from sentinel_security.timeutil import utc_now, utc_now_iso
 
 __all__ = [
     "AuthContext",
@@ -26,4 +27,6 @@ __all__ = [
     "auth_error_to_http_status",
     "resolve_tenant_id",
     "validate_tenant_id",
+    "utc_now",
+    "utc_now_iso",
 ]
