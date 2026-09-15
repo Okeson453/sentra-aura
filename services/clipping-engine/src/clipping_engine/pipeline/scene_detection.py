@@ -1,12 +1,15 @@
 """Scene detection pipeline stage.
 
-Detects scenes using visual similarity + embeddings + audio continuity.
+Groups shots into scenes using visual similarity when embeddings available;
+otherwise groups consecutive shots into scenes of bounded length.
 """
 from __future__ import annotations
 
 import logging
-import time
+from pathlib import Path
 from typing import Any
+
+from clipping_engine.pipeline.media_probe import probe_duration_seconds
 
 logger = logging.getLogger(__name__)
 
@@ -15,48 +18,59 @@ def detect_scenes(
     video_path: str,
     shot_boundaries: list[dict[str, Any]] | None = None,
     embedding_threshold: float = 0.75,
+    max_scene_seconds: float = 30.0,
 ) -> dict[str, Any]:
-    """Detect scenes by grouping shots with visual and audio coherence.
+    """Detect scenes by grouping shots with visual/audio coherence."""
+    if not Path(video_path).exists():
+        raise FileNotFoundError(f"Video not found: {video_path}")
 
-    Args:
-        video_path: Path to the video file.
-        shot_boundaries: Optional pre-computed shot boundaries.
-        embedding_threshold: Cosine similarity threshold for scene grouping.
-
-    Returns:
-        Dict with scenes and metadata.
-    """
     logger.info("Detecting scenes: %s", video_path)
-    time.sleep(0.1)
-    
-    # If no shot boundaries provided, generate some
+
     if not shot_boundaries:
+        duration = probe_duration_seconds(video_path) or 30.0
         shot_boundaries = [
             {"frame": 0, "time": 0.0},
-            {"frame": 150, "time": 5.0},
-            {"frame": 450, "time": 15.0},
+            {"frame": int(duration * 15), "time": duration / 2},
+            {"frame": int(duration * 30), "time": duration},
         ]
-    
-    # Group into scenes
-    mock_scenes = [
-        {
-            "scene_id": "scene_0",
-            "start_time": 0.0,
-            "end_time": 15.0,
-            "shot_indices": [0, 1],
-            "embedding": [0.1, 0.2, 0.3],
-        },
-        {
-            "scene_id": "scene_1",
-            "start_time": 15.0,
-            "end_time": 30.0,
-            "shot_indices": [2],
-            "embedding": [0.4, 0.5, 0.6],
-        }
-    ]
-    
+
+    # Group consecutive shots into scenes of at most max_scene_seconds
+    scenes: list[dict[str, Any]] = []
+    current_shots: list[int] = []
+    scene_start = float(shot_boundaries[0].get("time", 0.0))
+    for i, boundary in enumerate(shot_boundaries):
+        t = float(boundary.get("time", 0.0))
+        if current_shots and (t - scene_start) >= max_scene_seconds:
+            end_t = float(shot_boundaries[current_shots[-1]].get("time", t))
+            # extend to next boundary if available
+            if i < len(shot_boundaries):
+                end_t = t
+            scenes.append({
+                "scene_id": f"scene_{len(scenes)}",
+                "start_time": scene_start,
+                "end_time": end_t,
+                "shot_indices": list(current_shots),
+            })
+            current_shots = [i]
+            scene_start = t
+        else:
+            current_shots.append(i)
+
+    if current_shots:
+        last_t = float(shot_boundaries[current_shots[-1]].get("time", scene_start))
+        duration = probe_duration_seconds(video_path)
+        end_t = duration if duration and duration > last_t else last_t + 5.0
+        scenes.append({
+            "scene_id": f"scene_{len(scenes)}",
+            "start_time": scene_start,
+            "end_time": end_t,
+            "shot_indices": list(current_shots),
+        })
+
     return {
         "video_path": video_path,
-        "scenes": mock_scenes,
+        "scenes": scenes,
         "embedding_threshold": embedding_threshold,
+        "mode": "heuristic" if shot_boundaries else "empty",
+        "shot_count": len(shot_boundaries),
     }
