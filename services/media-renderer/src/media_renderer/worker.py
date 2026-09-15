@@ -30,7 +30,6 @@ class RenderWorker:
         logger.info("RenderWorker initialized, GPU available=%s", self.gpu_available)
 
     def _detect_gpu(self) -> bool:
-        """Detect if GPU (CUDA) is available for rendering."""
         try:
             result = os.popen("nvidia-smi -L 2>/dev/null").read()
             return len(result.strip()) > 0
@@ -38,7 +37,6 @@ class RenderWorker:
             return False
 
     async def start(self) -> None:
-        """Start the worker loop."""
         self._running = True
         logger.info("RenderWorker started")
         while self._running:
@@ -46,19 +44,14 @@ class RenderWorker:
             await asyncio.sleep(self.poll_interval)
 
     async def stop(self) -> None:
-        """Stop the worker loop."""
         self._running = False
         logger.info("RenderWorker stopped")
 
     async def _process_next_job(self) -> None:
-        """Process the next pending render job from the queue.
-
-        Fetches queued jobs from database and processes them.
-        """
         from media_renderer.db.session import get_db
         from media_renderer.db.models import RenderJobORM
         from sqlalchemy.orm import Session
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         db: Session = next(get_db())
         try:
@@ -73,25 +66,71 @@ class RenderWorker:
                 db.commit()
 
                 try:
-                    # Refuse fabricated success URLs (P1-01). Real encode + asset-store
-                    # upload must set output_url; until then mark failed explicitly.
-                    await asyncio.sleep(0.1)
-                    job.status = "failed"
-                    job.progress_percent = 0
-                    job.completed_at = datetime.utcnow()
-                    job.output_url = ""
-                    job.error_message = (
-                        "encode pipeline not yet producing real artifacts; "
-                        "refusing fabricated output_url"
+                    import json
+                    import tempfile
+                    from pathlib import Path as _P
+
+                    edl = {}
+                    if getattr(job, "edl_json", None):
+                        raw = job.edl_json
+                        edl = json.loads(raw) if isinstance(raw, str) else (raw or {})
+                    elif getattr(job, "metadata_json", None):
+                        meta = job.metadata_json if isinstance(job.metadata_json, dict) else {}
+                        edl = meta.get("edl") or meta.get("timeline") or {}
+
+                    source_path = (
+                        getattr(job, "source_path", None)
+                        or (edl.get("source_path") if isinstance(edl, dict) else None)
+                        or ""
                     )
-                    db.commit()
-                    logger.warning(
-                        "Job %s left failed until real encode is implemented", job.job_id
-                    )
+                    out_dir = tempfile.mkdtemp(prefix=f"render-{job.job_id}-")
+                    output_path = str(_P(out_dir) / f"{job.job_id}.mp4")
+                    profile = getattr(job, "profile_name", None) or "youtube_1080p"
+
+                    if source_path and _P(source_path).exists() and edl:
+                        result = await self.process_job(
+                            job.job_id, edl, output_path, profile_name=profile
+                        )
+                        if result.get("status") == "completed" and result.get("output_path"):
+                            outp = result["output_path"]
+                            if _P(outp).exists() and _P(outp).stat().st_size > 0:
+                                job.status = "completed"
+                                job.progress_percent = 100
+                                job.completed_at = datetime.now(timezone.utc)
+                                job.output_url = f"file://{outp}"
+                                db.commit()
+                                logger.info("Job %s completed with real artifact %s", job.job_id, outp)
+                            else:
+                                job.status = "failed"
+                                job.error_message = "encode produced empty or missing file"
+                                job.completed_at = datetime.now(timezone.utc)
+                                job.output_url = ""
+                                db.commit()
+                        else:
+                            job.status = "failed"
+                            job.error_message = result.get("error") or "process_job did not complete"
+                            job.completed_at = datetime.now(timezone.utc)
+                            job.output_url = ""
+                            db.commit()
+                    else:
+                        job.status = "failed"
+                        job.progress_percent = 0
+                        job.completed_at = datetime.now(timezone.utc)
+                        job.output_url = ""
+                        job.error_message = (
+                            "encode requires source_path + edl on the job; "
+                            "refusing fabricated output_url"
+                        )
+                        db.commit()
+                        logger.warning(
+                            "Job %s failed closed: missing source/edl for real encode",
+                            job.job_id,
+                        )
                 except Exception as e:
                     job.status = "failed"
                     job.error_message = str(e)
-                    job.completed_at = datetime.utcnow()
+                    job.completed_at = datetime.now(timezone.utc)
+                    job.output_url = ""
                     db.commit()
                     logger.error("Job %s failed: %s", job.job_id, e)
             else:
@@ -114,22 +153,17 @@ class RenderWorker:
         logger.info("Processing render job %s -> %s", job_id, output_path)
 
         try:
-            # Step 1: Composite
             compositor = Compositor()
             composite_result = compositor.composite(edl, output_path)
             logger.info("Composition complete: %s", composite_result["status"])
 
-            # Step 2: Add captions if provided
             caption_path = output_path
             if captions:
                 caption_renderer = CaptionRenderer()
                 caption_path = output_path.replace(".mp4", "_captioned.mp4")
                 caption_result = caption_renderer.render(output_path, captions, caption_path)
                 logger.info("Caption rendering complete: %s", caption_result["status"])
-            else:
-                logger.info("No captions provided, skipping caption rendering")
 
-            # Step 3: Encode with platform profile
             profile = get_profile(profile_name)
             encode_path = output_path.replace(".mp4", f"_{profile_name}.mp4")
             encode_result = self.ffmpeg.encode(caption_path, encode_path, profile)
