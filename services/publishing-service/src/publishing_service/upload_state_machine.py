@@ -5,7 +5,7 @@ Manages the lifecycle of a platform upload from draft through published/archived
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -46,8 +46,8 @@ class UploadStateMachine:
         self.error_message: str | None = None
         self.platform_video_id: str | None = None
         self.platform_url: str | None = None
-        self.created_at = datetime.utcnow()
-        self.updated_at = datetime.utcnow()
+        self.created_at = datetime.now(timezone.utc)
+        self.updated_at = datetime.now(timezone.utc)
         self._history: list[tuple[UploadState, UploadState, datetime]] = []
 
     def transition(self, new_state: UploadState, error_message: str | None = None) -> None:
@@ -57,7 +57,7 @@ class UploadStateMachine:
         old_state = self.state
         self.state = new_state
         self.error_message = error_message
-        self.updated_at = datetime.utcnow()
+        self.updated_at = datetime.now(timezone.utc)
         self._history.append((old_state, new_state, self.updated_at))
         logger.info("Upload %s: %s -> %s", self.upload_id, old_state.value, new_state.value)
 

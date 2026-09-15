@@ -6,7 +6,7 @@ Matches Architecture §5.6 and §14.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -35,7 +35,7 @@ class OperationsRequest:
     task_type: OperationsTaskType = OperationsTaskType.SCHEDULING
     parameters: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
-    requested_at: datetime = field(default_factory=datetime.utcnow)
+    requested_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 @dataclass
@@ -49,7 +49,7 @@ class OperationsResult:
     cost_estimate: float = 0.0
     resource_usage: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: datetime | None = None
 
 
@@ -68,4 +68,4 @@ class OperationsBatchResult:
     batch_id: str = ""
     results: list[OperationsResult] = field(default_factory=list)
     failed: list[dict[str, Any]] = field(default_factory=list)
-    completed_at: datetime = field(default_factory=datetime.utcnow)
+    completed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))

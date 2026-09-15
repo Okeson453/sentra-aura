@@ -1,6 +1,6 @@
 """Tests for event-schemas package."""
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 
 from event_schemas.registry_client import SchemaRegistryClient
 from event_schemas.v1 import TrendDetected, TrendSignal
@@ -17,7 +17,7 @@ def test_registry_validates_event():
     client = SchemaRegistryClient()
     event = TrendDetected(
         event_id="550e8400-e29b-41d4-a716-446655440000",
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         channel_id="CH-001",
         topic_id="TOP-001",
         trend_signal=TrendSignal(

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -26,15 +26,15 @@ async def test_platform_failure_does_not_mark_job_or_publication_success(monkeyp
         asset_id="video.mp4",
         platforms=["youtube"],
         tags=[],
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
     )
     job = main.PublishJob(
         job_id=f"publish-{suffix[:12]}",
         publication_id=publication.publication_id,
         status="publishing",
         platform_results=[],
-        started_at=datetime.utcnow(),
+        started_at=datetime.now(timezone.utc),
     )
     session.add_all([publication, job])
     session.commit()

@@ -1,6 +1,6 @@
 """Regression tests for DecisionLogRepository.override.
 
-Guards a latent ``NameError``: ``repositories.py`` called ``datetime.utcnow()``
+Guards a latent ``NameError``: ``repositories.py`` called ``datetime.now(timezone.utc)``
 without importing ``datetime``. The module imported cleanly and ``ruff`` F821
 was the only signal, so the defect only surfaced when the override path was
 actually exercised (operator override of a governance decision).

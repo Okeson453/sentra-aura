@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 from notification_service.routing.severity_router import Alert, Channel, Severity
@@ -63,7 +63,7 @@ class EscalationPolicy:
         self._pending[alert.alert_id] = {
             "alert": alert,
             "rule": rule,
-            "sent_at": datetime.utcnow(),
+            "sent_at": datetime.now(timezone.utc),
             "escalation_count": 0,
         }
         return rule.initial_channels
@@ -90,7 +90,7 @@ class EscalationPolicy:
                 await asyncio.sleep(30)
 
     async def _check_escalations(self) -> None:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         to_escalate: list[tuple[Alert, list[Channel]]] = []
 
         for alert_id, state in list(self._pending.items()):

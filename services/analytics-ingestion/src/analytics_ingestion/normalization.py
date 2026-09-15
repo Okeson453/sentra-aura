@@ -32,11 +32,11 @@ def _coerce_datetime(value: Any) -> datetime:
     Accepts a ``datetime``, an ISO-8601 string (with or without a trailing ``Z``,
     as produced by the REST surface), ``None`` (treated as now), or a POSIX
     timestamp.  ``measured_at`` arrives as a *string* over JSON, and the previous
-    implementation performed ``datetime.utcnow() - <str>`` directly, raising
+    implementation performed ``datetime.now(timezone.utc) - <str>`` directly, raising
     ``TypeError`` and turning every /api/v1/normalize request into a 400.
     """
     if value is None:
-        return datetime.utcnow()
+        return datetime.now(timezone.utc)
     if isinstance(value, datetime):
         parsed = value
     elif isinstance(value, (int, float)):
@@ -49,13 +49,13 @@ def _coerce_datetime(value: Any) -> datetime:
             parsed = datetime.fromisoformat(text)
         except ValueError:
             logger.warning("Unparseable measured_at %r; defaulting to utcnow()", value)
-            return datetime.utcnow()
+            return datetime.now(timezone.utc)
     else:
         logger.warning("Unsupported measured_at type %s; defaulting to utcnow()", type(value))
-        return datetime.utcnow()
+        return datetime.now(timezone.utc)
 
     # Keep a single naive-UTC representation: the rest of this module compares
-    # against datetime.utcnow(), which raises when mixed with aware datetimes.
+    # against datetime.now(timezone.utc), which raises when mixed with aware datetimes.
     if parsed.tzinfo is not None:
         parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
     return parsed
@@ -106,7 +106,7 @@ def normalize_metrics(
     norm_engagement = _safe_ratio(engagement, channel_baseline.get("avg_engagement", 0.02))
 
     # Time-decay weighting
-    age_days = (datetime.utcnow() - measured_at).total_seconds() / 86400
+    age_days = (datetime.now(timezone.utc) - measured_at).total_seconds() / 86400
     decay_factor = math.exp(-age_days * math.log(2) / 7.0)  # 7-day half-life
 
     # Composite score (weighted sum)

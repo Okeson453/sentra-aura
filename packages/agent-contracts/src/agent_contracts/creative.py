@@ -6,7 +6,7 @@ Matches Architecture §5.3 and §14.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -44,7 +44,7 @@ class CreativeRequest:
     reference_video_ids: list[str] = field(default_factory=list)
     brand_guidelines: dict[str, Any] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
-    requested_at: datetime = field(default_factory=datetime.utcnow)
+    requested_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 @dataclass
@@ -62,7 +62,7 @@ class CreativeResult:
     readability_score: float = 0.0
     seo_score: float = 0.0
     metadata: dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     reviewed_at: datetime | None = None
     reviewed_by: str = ""
 
@@ -82,4 +82,4 @@ class CreativeBatchResult:
     batch_id: str = ""
     results: list[CreativeResult] = field(default_factory=list)
     failed: list[dict[str, Any]] = field(default_factory=list)
-    completed_at: datetime = field(default_factory=datetime.utcnow)
+    completed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))

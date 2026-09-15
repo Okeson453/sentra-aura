@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 from uuid import UUID, uuid4
@@ -50,13 +50,13 @@ class AgentMessageEnvelope:
     def start_execution(self) -> None:
         """Mark execution start."""
         self.execution_start_time = time.monotonic()
-        self.message.state["execution_started_at"] = datetime.utcnow().isoformat()
+        self.message.state["execution_started_at"] = datetime.now(timezone.utc).isoformat()
 
     def end_execution(self) -> None:
         """Mark execution end and compute duration."""
         self.execution_end_time = time.monotonic()
         duration = self.execution_duration_seconds or 0.0
-        self.message.state["execution_completed_at"] = datetime.utcnow().isoformat()
+        self.message.state["execution_completed_at"] = datetime.now(timezone.utc).isoformat()
         self.message.state["execution_duration_seconds"] = duration
 
     @property
@@ -78,7 +78,7 @@ class AgentMessageEnvelope:
             "input_hash": input_hash,
             "output_hash": output_hash,
             "latency_ms": latency_ms,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         })
 
     def add_provider_call(self, provider: str, model: str, tokens: int, cost_usd: float, latency_ms: float) -> None:
@@ -88,7 +88,7 @@ class AgentMessageEnvelope:
             "tokens": tokens,
             "cost_usd": cost_usd,
             "latency_ms": latency_ms,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         })
         self.cost_accumulated_usd += cost_usd
 

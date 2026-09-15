@@ -4,7 +4,7 @@ Database models for render jobs and transcode jobs.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import Column, String, Integer, DateTime, Boolean, JSON
@@ -25,7 +25,7 @@ class RenderJobORM(Base, AuditMixin, TenantMixin, SoftDeleteMixin):
     output_format = Column(String(16), nullable=False, default="mp4")
     resolution = Column(String(16), nullable=False, default="1080p")
     frame_rate = Column(Integer, nullable=False, default=30)
-    started_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    started_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     completed_at = Column(DateTime, nullable=True)
     error_message = Column(String(1024), nullable=True)
     render_plan = Column(JSON, nullable=False, default={})
@@ -52,7 +52,7 @@ class TranscodeJobORM(Base, AuditMixin, TenantMixin, SoftDeleteMixin):
     status = Column(String(32), nullable=False, default="queued", index=True)
     progress_percent = Column(Integer, nullable=False, default=0)
     output_url = Column(String(1024), nullable=False, default="")
-    started_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    started_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     completed_at = Column(DateTime, nullable=True)
     error_message = Column(String(1024), nullable=True)
 

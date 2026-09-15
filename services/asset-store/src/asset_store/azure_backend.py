@@ -84,8 +84,8 @@ class AzureStorageBackend(StorageBackend):
     async def presigned_url(self, path: str, expiry_seconds: int = 3600, operation: str = "get") -> str:
         client = self._get_client()
         blob_client = client.get_blob_client(container=self.container, blob=path)
-        from datetime import datetime, timedelta
-        expiry = datetime.utcnow() + timedelta(seconds=expiry_seconds)
+        from datetime import datetime, timezone, timedelta
+        expiry = datetime.now(timezone.utc) + timedelta(seconds=expiry_seconds)
         try:
             permission = "r" if operation == "get" else "w"
             sas_token = blob_client.generate_shared_access_signature(

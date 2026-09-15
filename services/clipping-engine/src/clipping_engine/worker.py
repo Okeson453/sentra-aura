@@ -6,7 +6,7 @@ import logging
 import os
 import tempfile
 from contextlib import suppress
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from typing import Any
 
 from sqlalchemy import and_, or_, update
@@ -53,7 +53,7 @@ class ClippingWorker:
 
     def _claim_next_job(self) -> dict[str, str] | None:
         """Atomically claim one queued or lease-expired job."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         stale_before = now - timedelta(seconds=self.lease_seconds)
         eligible = and_(
             ClipJob.attempt_count < self.max_attempts,
@@ -106,7 +106,7 @@ class ClippingWorker:
                         progress_percent=100,
                         candidates=candidates,
                         segment_count=len(candidates),
-                        completed_at=datetime.utcnow(),
+                        completed_at=datetime.now(timezone.utc),
                         claimed_at=None,
                     )
                 )
@@ -122,7 +122,7 @@ class ClippingWorker:
                         status="failed" if terminal else "queued",
                         progress_percent=0,
                         error_message=str(exc),
-                        completed_at=datetime.utcnow() if terminal else None,
+                        completed_at=datetime.now(timezone.utc) if terminal else None,
                         claimed_at=None,
                     )
                 )

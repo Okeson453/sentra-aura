@@ -6,7 +6,7 @@ import asyncio
 import json
 import logging
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 
 from model_eval_service.config import config
 from model_eval_service.drift_monitor import DriftMonitor
@@ -59,7 +59,7 @@ async def run_eval(
             "agent_id": agent_id,
             "version": version,
             "dataset_version": dataset_version,
-            "evaluated_at": datetime.utcnow().isoformat(),
+            "evaluated_at": datetime.now(timezone.utc).isoformat(),
             "offline": {
                 "total_cases": offline_result.total_cases,
                 "passed_cases": offline_result.passed_cases,

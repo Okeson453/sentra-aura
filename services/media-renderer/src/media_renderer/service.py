@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy.orm import Session
@@ -86,7 +86,7 @@ class MediaRendererService:
                 output_format=request.output_format,
                 resolution=request.resolution,
                 frame_rate=request.frame_rate,
-                started_at=datetime.utcnow(),
+                started_at=datetime.now(timezone.utc),
                 completed_at=None,
                 render_plan={},
                 timeline_clips=0,
@@ -132,7 +132,7 @@ class MediaRendererService:
                 return {"job_id": job_id, "status": "not_found"}
             
             orm_job.status = "cancelled"
-            orm_job.updated_at = datetime.utcnow()
+            orm_job.updated_at = datetime.now(timezone.utc)
             db.commit()
             return orm_to_model_render_job(orm_job)
         finally:
@@ -187,7 +187,7 @@ class MediaRendererService:
                 status="queued",
                 progress_percent=0,
                 output_url="",
-                started_at=datetime.utcnow(),
+                started_at=datetime.now(timezone.utc),
                 completed_at=None,
                 created_by=request.source_asset_id,
                 updated_by=request.source_asset_id,

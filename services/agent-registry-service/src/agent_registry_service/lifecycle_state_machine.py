@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -60,8 +60,8 @@ class LifecycleRecord:
     version: str
     state: LifecycleState = LifecycleState.DRAFT
     history: list[dict[str, Any]] = field(default_factory=list)
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    updated_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
     def transition(self, trigger: TransitionTrigger, eval_score: float | None = None, approved_by: str | None = None) -> LifecycleState:
         """Attempt a state transition."""
@@ -76,7 +76,7 @@ class LifecycleRecord:
 
                 old_state = self.state
                 self.state = vt.to_state
-                self.updated_at = datetime.utcnow()
+                self.updated_at = datetime.now(timezone.utc)
                 self.history.append({
                     "from": old_state.value,
                     "to": vt.to_state.value,

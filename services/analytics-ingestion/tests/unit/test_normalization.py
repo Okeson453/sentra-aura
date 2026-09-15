@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from analytics_ingestion.normalization import normalize_metrics, compute_performance_signal, NormalizedMetrics
 
@@ -17,7 +17,7 @@ def test_normalize_basic():
         "watch_time_seconds": 800000,
         "likes": 500,
         "comments": 100,
-        "measured_at": datetime.utcnow(),
+        "measured_at": datetime.now(timezone.utc),
     }
     baseline = {"avg_ctr": 0.05, "avg_duration": 180.0, "avg_watch_time": 300000.0, "avg_engagement": 0.02}
     result = normalize_metrics(raw, baseline)
@@ -38,7 +38,7 @@ def test_normalize_zero_baseline():
         "watch_time_seconds": 0,
         "likes": 0,
         "comments": 0,
-        "measured_at": datetime.utcnow(),
+        "measured_at": datetime.now(timezone.utc),
     }
     baseline = {"avg_ctr": 0.0, "avg_duration": 0.0, "avg_watch_time": 0.0, "avg_engagement": 0.0}
     result = normalize_metrics(raw, baseline)
@@ -47,7 +47,7 @@ def test_normalize_zero_baseline():
 
 
 def test_compute_signals():
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     history = [
         NormalizedMetrics(
             video_id="v1", channel_id="c1", views=1000,

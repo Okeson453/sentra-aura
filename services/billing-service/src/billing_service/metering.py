@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -118,7 +118,7 @@ class MeteringEngine:
         """
         unit_cost = self._unit_costs.get(operation, 0.0)
         total_cost = round(units * unit_cost, 6)
-        ts = timestamp or datetime.utcnow()
+        ts = timestamp or datetime.now(timezone.utc)
 
         record = MeterRecord(
             tenant_id=tenant_id,

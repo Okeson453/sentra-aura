@@ -1,7 +1,7 @@
 """Repository layer for the Control Plane API."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from uuid import uuid4
 
@@ -286,7 +286,7 @@ class DecisionLogRepository:
             return None
         log.override_status = override_status
         log.override_by = override_by
-        log.override_at = datetime.utcnow()
+        log.override_at = datetime.now(timezone.utc)
         self.db.commit()
         self.db.refresh(log)
         return log

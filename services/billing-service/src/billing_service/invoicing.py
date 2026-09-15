@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -100,7 +100,7 @@ class InvoicingEngine:
         credit = {
             "amount_usd": amount_usd,
             "reason": reason,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "credit_id": f"CR-{uuid.uuid4().hex[:8].upper()}",
         }
         self._credit_notes.setdefault(tenant_id, []).append(credit)
@@ -180,8 +180,8 @@ class InvoicingEngine:
             total_usd=round(total, 2),
             currency=self.currency,
             status="draft",
-            due_date=datetime.utcnow() + timedelta(days=self.invoice_due_days),
-            created_at=datetime.utcnow(),
+            due_date=datetime.now(timezone.utc) + timedelta(days=self.invoice_due_days),
+            created_at=datetime.now(timezone.utc),
             notes=notes,
         )
         self._invoices[invoice_id] = invoice
@@ -203,7 +203,7 @@ class InvoicingEngine:
         if inv.status not in ("draft", "sent"):
             raise ValueError(f"Cannot mark invoice {invoice_id} as sent (status: {inv.status})")
         inv.status = "sent"
-        inv.sent_at = sent_at or datetime.utcnow()
+        inv.sent_at = sent_at or datetime.now(timezone.utc)
         logger.info("Invoice %s marked as sent", invoice_id)
         return inv
 
@@ -221,7 +221,7 @@ class InvoicingEngine:
         if inv.status == "paid":
             raise ValueError(f"Invoice {invoice_id} is already paid")
         inv.status = "paid"
-        inv.paid_at = paid_at or datetime.utcnow()
+        inv.paid_at = paid_at or datetime.now(timezone.utc)
         inv.payment_method = payment_method
         inv.stripe_invoice_id = stripe_invoice_id
         logger.info("Invoice %s marked as paid via %s", invoice_id, payment_method or "unknown")
@@ -271,7 +271,7 @@ class InvoicingEngine:
 
     def get_overdue_invoices(self, as_of: datetime | None = None) -> list[Invoice]:
         """Get all invoices that are past their due date."""
-        now = as_of or datetime.utcnow()
+        now = as_of or datetime.now(timezone.utc)
         return [
             inv for inv in self._invoices.values()
             if inv.status in ("sent", "overdue") and inv.due_date < now
@@ -300,7 +300,7 @@ class InvoicingEngine:
             payment_method=payment_method,
             status="completed",
             transaction_reference=transaction_reference,
-            processed_at=datetime.utcnow(),
+            processed_at=datetime.now(timezone.utc),
             metadata=metadata or {},
         )
         self._payments[payment_id] = payment

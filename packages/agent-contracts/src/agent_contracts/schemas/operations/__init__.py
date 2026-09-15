@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 
@@ -19,7 +19,7 @@ class PerformanceRecord:
     engagement_rate: float = 0.0
     subscriber_gain: int = 0
     traffic_sources: dict[str, Any] = field(default_factory=dict)
-    measured_at: datetime = field(default_factory=datetime.utcnow)
+    measured_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 @dataclass
@@ -46,7 +46,7 @@ class PolicySnapshot:
     policy_type: str = ""
     weights: dict[str, float] = field(default_factory=dict)
     version: int = 1
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -61,4 +61,4 @@ class DecisionLog:
     alternatives_rejected: list[str] = field(default_factory=list)
     human_override_possible: bool = True
     channel_id: str | None = None
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))

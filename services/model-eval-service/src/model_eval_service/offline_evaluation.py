@@ -8,7 +8,7 @@ import os
 import statistics
 import time
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Protocol
 
@@ -378,7 +378,7 @@ class OfflineEvaluator:
             p99_latency_ms=round(sorted_latencies[min(p99_idx, len(sorted_latencies) - 1)], 2),
             avg_latency_ms=round(statistics.mean(latencies), 2) if latencies else 0.0,
             total_cost_usd=round(sum(costs), 4),
-            evaluated_at=datetime.utcnow(),
+            evaluated_at=datetime.now(timezone.utc),
             duration_seconds=round(duration, 2),
             details=[{
                 "case_id": r.case_id,

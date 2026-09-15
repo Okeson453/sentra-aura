@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import contextvars
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import Column, String, DateTime, Boolean, event, inspect, text
@@ -100,11 +100,11 @@ class AuditMixin:
 
     @declared_attr
     def created_at(cls) -> Column:
-        return Column(DateTime, default=datetime.utcnow, nullable=False)
+        return Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
     @declared_attr
     def updated_at(cls) -> Column:
-        return Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+        return Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     @declared_attr
     def created_by(cls) -> Column:

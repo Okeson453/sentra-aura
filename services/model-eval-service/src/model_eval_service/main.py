@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import Body, FastAPI, HTTPException, Query, status
@@ -83,7 +83,7 @@ async def health_check() -> dict[str, Any]:
     return {
         "status": "healthy",
         "service": config.service_name,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -372,7 +372,7 @@ async def run_all_benchmarks(
                 }
                 for r in results
             ],
-            "evaluated_at": datetime.utcnow().isoformat(),
+            "evaluated_at": datetime.now(timezone.utc).isoformat(),
         }
 
     except Exception as exc:
@@ -413,7 +413,7 @@ async def set_drift_baseline(
             "baseline_set": True,
             "baseline_samples": len(scores),
             "baseline_mean": round(sum(scores) / len(scores), 4) if scores else 0.0,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
     except Exception as exc:
         logger.error("Failed to set drift baseline: %s", exc)
@@ -517,7 +517,7 @@ async def regression_gate(
         }
         if not offline_passed:
             all_passed = False
-        _persist_eval_result(agent_id, version, {**gate_results["offline"], "eval_type": "offline", "evaluated_at": datetime.utcnow().isoformat()})
+        _persist_eval_result(agent_id, version, {**gate_results["offline"], "eval_type": "offline", "evaluated_at": datetime.now(timezone.utc).isoformat()})
     except Exception as exc:
         logger.error("Offline eval failed in gate: %s", exc)
         gate_results["offline"] = {"passed": False, "error": str(exc)}
@@ -536,7 +536,7 @@ async def regression_gate(
         }
         if not safety_passed:
             all_passed = False
-        _persist_eval_result(agent_id, version, {**gate_results["safety"], "eval_type": "safety", "evaluated_at": datetime.utcnow().isoformat()})
+        _persist_eval_result(agent_id, version, {**gate_results["safety"], "eval_type": "safety", "evaluated_at": datetime.now(timezone.utc).isoformat()})
     except Exception as exc:
         logger.error("Safety eval failed in gate: %s", exc)
         gate_results["safety"] = {"passed": False, "error": str(exc)}
@@ -552,7 +552,7 @@ async def regression_gate(
         "version": version,
         "gate_passed": all_passed,
         "results": gate_results,
-        "evaluated_at": datetime.utcnow().isoformat(),
+        "evaluated_at": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -578,7 +578,7 @@ async def get_evaluation_report(
     report = {
         "agent_id": agent_id,
         "version": version,
-        "generated_at": datetime.utcnow().isoformat(),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "total_evaluations": len(records),
         "summary": {
             "offline_runs": len([r for r in records if r.get("eval_type") == "offline"]),

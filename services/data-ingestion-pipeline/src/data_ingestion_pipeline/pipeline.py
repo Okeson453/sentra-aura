@@ -24,10 +24,10 @@ class IngestionPipeline:
 
     async def run(self, params: dict[str, Any], subject: str = "sentraura.events") -> IngestionJob:
         """Run the ingestion pipeline."""
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         job = IngestionJob(source=self.collector.source)
-        job.started_at = datetime.utcnow()
+        job.started_at = datetime.now(timezone.utc)
         job.status = "RUNNING"
 
         try:
@@ -62,6 +62,6 @@ class IngestionPipeline:
             job.status = "FAILED"
             job.errors.append(str(exc))
         finally:
-            job.completed_at = datetime.utcnow()
+            job.completed_at = datetime.now(timezone.utc)
 
         return job

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Column,
@@ -37,8 +37,8 @@ class Channel(Base):
     target_audience = Column(Text)
     content_mix = Column(JSON, default=dict)
     schedule = Column(JSON, default=dict)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     created_by = Column(String(255))
     updated_by = Column(String(255))
 
@@ -57,8 +57,8 @@ class ContentPlan(Base):
     strategy = Column(JSON, default=dict)
     budget = Column(JSON, default=dict)
     deadline = Column(DateTime)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     channel = relationship("Channel", back_populates="content_plans")
     scripts = relationship("Script", back_populates="content_plan", cascade="all, delete-orphan")
@@ -76,8 +76,8 @@ class Script(Base):
     estimated_duration = Column(Integer, default=0)
     disclosure_tags = Column(JSON, default=list)
     version = Column(Integer, default=1)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     content_plan = relationship("ContentPlan", back_populates="scripts")
     videos = relationship("Video", back_populates="script", cascade="all, delete-orphan")
@@ -93,8 +93,8 @@ class Video(Base):
     duration_seconds = Column(Integer, default=0)
     resolution = Column(String(20), default="1920x1080")
     asset_manifest = Column(JSON, default=dict)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     script = relationship("Script", back_populates="videos")
     clips = relationship("Clip", back_populates="video", cascade="all, delete-orphan")
@@ -114,8 +114,8 @@ class Clip(Base):
     aspect_ratio = Column(String(10), default="9:16")
     scores = Column(JSON, default=dict)
     lineage = Column(JSON, default=dict)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     video = relationship("Video", back_populates="clips")
     publications = relationship("Publication", back_populates="clip", cascade="all, delete-orphan")
@@ -135,8 +135,8 @@ class Publication(Base):
     scheduled_at = Column(DateTime)
     published_at = Column(DateTime)
     metadata_json = Column(JSON, default=dict)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     channel = relationship("Channel", back_populates="publications")
     clip = relationship("Clip", back_populates="publications")
@@ -156,7 +156,7 @@ class PerformanceRecord(Base):
     engagement_rate = Column(Float, default=0.0)
     subscriber_gain = Column(Integer, default=0)
     traffic_sources = Column(JSON, default=dict)
-    measured_at = Column(DateTime, default=datetime.utcnow)
+    measured_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     publication = relationship("Publication", back_populates="performance")
 
@@ -177,8 +177,8 @@ class Experiment(Base):
     end_time = Column(DateTime)
     required_sample_size = Column(Integer, default=1000)
     results = Column(JSON, default=dict)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     channel = relationship("Channel", back_populates="experiments")
 
@@ -194,8 +194,8 @@ class Policy(Base):
     weights = Column(JSON, default=dict)
     version = Column(Integer, default=1)
     status = Column(String(20), default="ACTIVE")
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 
 class DecisionLog(Base):
@@ -212,7 +212,7 @@ class DecisionLog(Base):
     override_status = Column(String(20), default="PENDING")
     override_by = Column(String(255))
     override_at = Column(DateTime)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
 def get_engine(database_url: str):

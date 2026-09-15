@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import numpy as np
@@ -47,7 +47,7 @@ class DriftMonitor:
             "mean": float(np.mean(scores)),
             "std": float(np.std(scores)),
             "embeddings": np.array(embeddings) if embeddings else None,
-            "set_at": datetime.utcnow(),
+            "set_at": datetime.now(timezone.utc),
         }
         logger.info("Baseline set for %s: mean=%.4f, std=%.4f", key, self._baselines[key]["mean"], self._baselines[key]["std"])
 
@@ -114,10 +114,10 @@ class DriftMonitor:
             drift_score=round(float(drift_score), 4),
             drift_type="statistical" if embedding_drift < 0.1 else "embedding",
             baseline_window=baseline["set_at"].isoformat(),
-            current_window=datetime.utcnow().isoformat(),
+            current_window=datetime.now(timezone.utc).isoformat(),
             feature_drifts=feature_drifts,
             recommended_action=recommended_action,
-            reported_at=datetime.utcnow(),
+            reported_at=datetime.now(timezone.utc),
         )
 
     def _compute_embedding_drift(

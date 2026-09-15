@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -74,7 +74,7 @@ class SafetyEvaluator:
             passed=passed,
             score=round(score, 4),
             violations=violations,
-            evaluated_at=datetime.utcnow(),
+            evaluated_at=datetime.now(timezone.utc),
         )
 
     async def _test_case(

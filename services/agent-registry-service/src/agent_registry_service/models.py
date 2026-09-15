@@ -1,7 +1,7 @@
 """Pydantic models for the Agent Registry Service."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 from uuid import UUID, uuid4
@@ -59,8 +59,8 @@ class AgentRegistration(BaseModel):
     cost_estimate_usd: float = 0.0
     avg_latency_ms: float = 0.0
     status: AgentStatus = AgentStatus.ACTIVE
-    registered_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    registered_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class RegisteredAgent(BaseModel):
@@ -83,7 +83,7 @@ class AgentVersion(BaseModel):
     version: str
     status: AgentStatus
     release_notes: str = ""
-    released_at: datetime = Field(default_factory=datetime.utcnow)
+    released_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     deprecated_at: datetime | None = None
 
 
@@ -104,13 +104,13 @@ class EvaluationRecord(BaseModel):
     score: float = Field(ge=0.0, le=1.0)
     evaluator: str
     notes: str = ""
-    evaluated_at: datetime = Field(default_factory=datetime.utcnow)
+    evaluated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     metrics: dict[str, Any] = Field(default_factory=dict)
 
 
 class HealthResponse(BaseModel):
     status: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     version: str = "1.0.0"
     checks: dict[str, Any] = Field(default_factory=dict)
 

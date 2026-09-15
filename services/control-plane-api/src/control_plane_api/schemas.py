@@ -5,7 +5,7 @@ Matches Architecture §3.1 and Backend Spec §3.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -35,7 +35,7 @@ class ErrorResponse(BaseModel):
     error: str
     detail: str | None = None
     code: str | None = None
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     request_id: str | None = None
 
 

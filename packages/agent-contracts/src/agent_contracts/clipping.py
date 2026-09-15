@@ -6,7 +6,7 @@ Matches Architecture §5.4 and §14.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -46,7 +46,7 @@ class ClipRequest:
         "brand_safety": 0.15,
     })
     metadata: dict[str, Any] = field(default_factory=dict)
-    requested_at: datetime = field(default_factory=datetime.utcnow)
+    requested_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 @dataclass
@@ -66,7 +66,7 @@ class ClipResult:
     thumbnail_asset_id: str = ""
     video_asset_id: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: datetime | None = None
 
 
@@ -86,4 +86,4 @@ class ClipBatchResult:
     batch_id: str = ""
     results: list[ClipResult] = field(default_factory=list)
     failed: list[dict[str, Any]] = field(default_factory=list)
-    completed_at: datetime = field(default_factory=datetime.utcnow)
+    completed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))

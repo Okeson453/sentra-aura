@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -76,7 +76,7 @@ class QualityBenchmark:
             max_score=1.0,
             passed=passed,
             metrics={"cases_evaluated": len(scores), "min_score": min(scores) if scores else 0.0},
-            evaluated_at=datetime.utcnow(),
+            evaluated_at=datetime.now(timezone.utc),
         )
 
     async def run_all_benchmarks(

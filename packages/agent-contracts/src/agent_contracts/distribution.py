@@ -6,7 +6,7 @@ Matches Architecture §5.5 and §14.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
@@ -39,7 +39,7 @@ class DistributionRequest:
     platforms: list[DistributionPlatform] = field(default_factory=list)
     schedule_at: datetime | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
-    requested_at: datetime = field(default_factory=datetime.utcnow)
+    requested_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 @dataclass
@@ -56,7 +56,7 @@ class DistributionResult:
     published_at: datetime | None = None
     error_message: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 @dataclass
@@ -74,4 +74,4 @@ class DistributionBatchResult:
     batch_id: str = ""
     results: list[DistributionResult] = field(default_factory=list)
     failed: list[dict[str, Any]] = field(default_factory=list)
-    completed_at: datetime = field(default_factory=datetime.utcnow)
+    completed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))

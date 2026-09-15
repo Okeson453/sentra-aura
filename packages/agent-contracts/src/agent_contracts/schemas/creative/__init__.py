@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 
@@ -17,7 +17,7 @@ class ResearchBundle:
     coverage_score: float = 0.0
     confidence_score: float = 0.0
     status: str = "PENDING"
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 @dataclass
@@ -49,4 +49,4 @@ class Script:
     disclosure_tags: list[str] = field(default_factory=list)
     status: str = "DRAFT"
     version: int = 1
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))

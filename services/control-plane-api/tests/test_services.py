@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 from types import SimpleNamespace
 
@@ -27,7 +27,7 @@ def make_channel_mock(**kwargs):
         id="ch-1", tenant_id="t-1", name="Test Channel", platform="youtube",
         platform_channel_id="UC123", status="ACTIVE", niche="tech",
         target_audience="developers", content_mix={}, schedule={},
-        created_at=datetime.utcnow(), updated_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc),
         created_by="user-1", updated_by="user-1",
     )
     defaults.update(kwargs)
@@ -38,7 +38,7 @@ def make_plan_mock(**kwargs):
     defaults = dict(
         id="plan-1", channel_id="ch-1", topic="AI", status="DRAFT",
         strategy={}, budget={}, deadline=None,
-        created_at=datetime.utcnow(), updated_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc),
     )
     defaults.update(kwargs)
     return SimpleNamespace(**defaults)
@@ -49,7 +49,7 @@ def make_script_mock(**kwargs):
         id="script-1", content_plan_id="plan-1", title="Script", content="Old content",
         status="DRAFT", word_count=100, estimated_duration=60,
         disclosure_tags=[], version=1,
-        created_at=datetime.utcnow(), updated_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc),
     )
     defaults.update(kwargs)
     return SimpleNamespace(**defaults)
@@ -59,7 +59,7 @@ def make_video_mock(**kwargs):
     defaults = dict(
         id="vid-1", script_id="script-1", channel_id="ch-1", status="RENDERING",
         duration_seconds=0, resolution="1080p", asset_manifest={},
-        created_at=datetime.utcnow(), updated_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc),
     )
     defaults.update(kwargs)
     return SimpleNamespace(**defaults)
@@ -70,7 +70,7 @@ def make_clip_mock(**kwargs):
         id="clip-1", video_id="vid-1", channel_id="ch-1", clip_type="HOOK",
         status="READY_TO_PUBLISH", start_ms=0, end_ms=15000, duration_ms=15000,
         aspect_ratio="9:16", scores={}, lineage={},
-        created_at=datetime.utcnow(), updated_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc),
     )
     defaults.update(kwargs)
     return SimpleNamespace(**defaults)
@@ -81,7 +81,7 @@ def make_pub_mock(**kwargs):
         id="pub-1", channel_id="ch-1", video_id="vid-1", clip_id=None,
         platform="YOUTUBE", platform_id="", platform_url="", status="SCHEDULED",
         scheduled_at=None, published_at=None, metadata_json={},
-        created_at=datetime.utcnow(), updated_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc),
     )
     defaults.update(kwargs)
     return SimpleNamespace(**defaults)
@@ -92,7 +92,7 @@ def make_exp_mock(**kwargs):
         id="exp-1", channel_id="ch-1", name="Test", hypothesis="H1",
         variant_ids=[], control_id="", asset_id="", metrics=[], status="DRAFT",
         start_time=None, end_time=None, required_sample_size=1000, results={},
-        created_at=datetime.utcnow(), updated_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc),
     )
     defaults.update(kwargs)
     return SimpleNamespace(**defaults)
@@ -102,7 +102,7 @@ def make_policy_mock(**kwargs):
     defaults = dict(
         id="pol-1", channel_id="ch-1", policy_type="CONTENT", autonomy_level="L2",
         rules={}, weights={}, version=1, status="ACTIVE",
-        created_at=datetime.utcnow(), updated_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc),
     )
     defaults.update(kwargs)
     return SimpleNamespace(**defaults)
@@ -114,7 +114,7 @@ def make_decision_mock(**kwargs):
         reasoning=[], confidence=0.85, alternatives_rejected=[],
         human_override_possible=True, override_status="PENDING",
         override_by=None, override_at=None,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
     )
     defaults.update(kwargs)
     return SimpleNamespace(**defaults)
@@ -253,7 +253,7 @@ class TestPublishingService:
         db = MagicMock()
         pub_repo = MagicMock()
         pub_repo.get.return_value = make_pub_mock(status="SCHEDULED")
-        pub_repo.update.return_value = make_pub_mock(status="PUBLISHED", platform_id="plat-123", published_at=datetime.utcnow())
+        pub_repo.update.return_value = make_pub_mock(status="PUBLISHED", platform_id="plat-123", published_at=datetime.now(timezone.utc))
 
         with patch("control_plane_api.services.PublicationRepository", return_value=pub_repo):
             svc = PublishingService(db)
@@ -301,7 +301,7 @@ class TestExperimentService:
         db = MagicMock()
         repo = MagicMock()
         repo.get.return_value = make_exp_mock(status="DRAFT")
-        repo.update.return_value = make_exp_mock(status="RUNNING", start_time=datetime.utcnow())
+        repo.update.return_value = make_exp_mock(status="RUNNING", start_time=datetime.now(timezone.utc))
 
         with patch("control_plane_api.services.ExperimentRepository", return_value=repo):
             svc = ExperimentService(db)
@@ -327,9 +327,9 @@ class TestDecisionService:
         db = MagicMock()
         repo = MagicMock()
         repo.get.return_value = make_decision_mock(override_status="PENDING")
-        repo.override.return_value = make_decision_mock(override_status="REJECTED", override_by="user-1", override_at=datetime.utcnow())
+        repo.override.return_value = make_decision_mock(override_status="REJECTED", override_by="user-1", override_at=datetime.now(timezone.utc))
         repo.update.return_value = make_decision_mock(
-            override_status="REJECTED", override_by="user-1", override_at=datetime.utcnow(),
+            override_status="REJECTED", override_by="user-1", override_at=datetime.now(timezone.utc),
             reasoning=[{"action": "human_override", "by": "user-1", "status": "REJECTED"}],
         )
 
@@ -342,7 +342,7 @@ class TestDecisionService:
     def test_override_already_overridden(self):
         db = MagicMock()
         repo = MagicMock()
-        repo.get.return_value = make_decision_mock(override_status="REJECTED", override_by="user-1", override_at=datetime.utcnow())
+        repo.get.return_value = make_decision_mock(override_status="REJECTED", override_by="user-1", override_at=datetime.now(timezone.utc))
 
         with patch("control_plane_api.services.DecisionLogRepository", return_value=repo):
             svc = DecisionService(db)

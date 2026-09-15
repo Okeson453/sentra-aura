@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from analytics_ingestion.config import config
@@ -109,7 +109,7 @@ class BackgroundTaskScheduler:
                 self._last_fetch_results[channel_id] = {
                     "status": "ok",
                     "video_count": channel_metrics.video_count,
-                    "fetched_at": datetime.utcnow().isoformat(),
+                    "fetched_at": datetime.now(timezone.utc).isoformat(),
                 }
                 logger.info("Fetched channel metrics for %s (%d videos)", channel_id, channel_metrics.video_count)
             except Exception as exc:
@@ -117,7 +117,7 @@ class BackgroundTaskScheduler:
                 self._last_fetch_results[channel_id] = {
                     "status": "error",
                     "error": str(exc),
-                    "fetched_at": datetime.utcnow().isoformat(),
+                    "fetched_at": datetime.now(timezone.utc).isoformat(),
                 }
 
     async def _periodic_warehouse_flush(self) -> None:
@@ -152,7 +152,7 @@ class BackgroundTaskScheduler:
                 quota_status = await self.youtube_client.get_quota_status()
                 record = ChannelHealthRecord(
                     channel_id=channel_id,
-                    checked_at=datetime.utcnow(),
+                    checked_at=datetime.now(timezone.utc),
                     api_reachable=True,
                     quota_remaining=quota_status.remaining if quota_status else None,
                 )
@@ -161,7 +161,7 @@ class BackgroundTaskScheduler:
             except Exception as exc:
                 record = ChannelHealthRecord(
                     channel_id=channel_id,
-                    checked_at=datetime.utcnow(),
+                    checked_at=datetime.now(timezone.utc),
                     api_reachable=False,
                     quota_remaining=None,
                     error=str(exc),

@@ -11,7 +11,7 @@ import json
 import logging
 import random
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from data_ingestion_pipeline.models import NormalizedEvent
@@ -262,7 +262,7 @@ class NATSPublisher:
                     "payload": event.payload,
                 },
                 "error": error,
-                "failed_at": datetime.utcnow().isoformat(),
+                "failed_at": datetime.now(timezone.utc).isoformat(),
                 "retry_count": self.config.max_publish_retries,
             }).encode()
             await self._js.publish(self.config.dlq_subject, payload)

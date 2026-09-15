@@ -107,6 +107,13 @@ autoscaling:
           value: 4
           periodSeconds: 15
       selectPolicy: Max
+  # KEDA event-driven autoscaling (templates/scaledobject.yaml when enabled)
+  keda:
+    enabled: false
+    triggerType: nats-jetstream
+    natsMonitoring: "nats:8222"
+    stream: "SENTRAURA_EVENTS"
+    lagThreshold: "50"
 
 env:
   - name: SERVICE_NAME
@@ -159,3 +166,14 @@ networkPolicy:
 extraLabels:
   sentra.io/managed-by: helm
   sentra.io/part-of: sentra-aura
+
+# Progressive delivery (Argo Rollouts) — Backend §8 / Appendix A.4
+# Gated: templates/rollout.yaml only renders when enabled=true
+progressiveDelivery:
+  enabled: false
+  pause5m: "30m"
+  pause25: "1h"
+  pause50: "2h"
+  prometheusAddress: "http://prometheus:9090"
+  # Canary steps: 5% → pause → 25% → pause → 50% → pause → 100%
+  # Analysis templates evaluate error rate < 1% and P99 latency

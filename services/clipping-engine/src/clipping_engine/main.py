@@ -10,7 +10,7 @@ import logging
 import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
@@ -141,8 +141,8 @@ async def detect_clips(request: Request, authorization: str = Depends(_verify_be
         progress_percent=100,
         candidates=candidates,
         segment_count=len(norm),
-        started_at=datetime.utcnow(),
-        completed_at=datetime.utcnow(),
+        started_at=datetime.now(timezone.utc),
+        completed_at=datetime.now(timezone.utc),
     )
     db.add(job)
     db.commit()
@@ -229,7 +229,7 @@ async def render_clip(clip_id: str, request: Request, authorization: str = Depen
         status="queued",
         progress_percent=0,
         output_url="",
-        started_at=datetime.utcnow(),
+        started_at=datetime.now(timezone.utc),
     )
     db.add(render_job)
     db.commit()
@@ -285,7 +285,7 @@ async def _process_render_job(db: Session, job_id: str, clip_id: str, body: dict
         if resp.status_code >= 400:
             render_job.status = "failed"
             render_job.error_message = f"media-renderer HTTP {resp.status_code}: {resp.text[:500]}"
-            render_job.completed_at = datetime.utcnow()
+            render_job.completed_at = datetime.now(timezone.utc)
             db.commit()
             return
         data = resp.json() if resp.content else {}
@@ -294,14 +294,14 @@ async def _process_render_job(db: Session, job_id: str, clip_id: str, body: dict
         if not out and status == "completed":
             render_job.status = "failed"
             render_job.error_message = "media-renderer returned completed without output_url"
-            render_job.completed_at = datetime.utcnow()
+            render_job.completed_at = datetime.now(timezone.utc)
             db.commit()
             return
         render_job.status = status if status in ("queued", "processing", "completed", "failed") else "completed"
         render_job.progress_percent = int(data.get("progress_percent") or (100 if out else 50))
         render_job.output_url = out
         if render_job.status in ("completed", "failed"):
-            render_job.completed_at = datetime.utcnow()
+            render_job.completed_at = datetime.now(timezone.utc)
         if render_job.status == "failed" and not render_job.error_message:
             render_job.error_message = data.get("error_message") or data.get("error") or "render failed"
         db.commit()
@@ -310,7 +310,7 @@ async def _process_render_job(db: Session, job_id: str, clip_id: str, body: dict
         if render_job:
             render_job.status = "failed"
             render_job.error_message = f"render dispatch error: {e}"
-            render_job.completed_at = datetime.utcnow()
+            render_job.completed_at = datetime.now(timezone.utc)
             db.commit()
 
 
@@ -366,8 +366,8 @@ async def create_segment(request: Request, authorization: str = Depends(_verify_
         tags=list(body.get("tags") or []),
         text=str(body.get("text") or ""),
         metadata_json=dict(body.get("metadata") or {}),
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
     )
     db.add(row)
     db.commit()

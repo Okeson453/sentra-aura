@@ -6,7 +6,7 @@ Matches Architecture §3.1 and Backend Spec §3.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from uuid import uuid4
 
@@ -423,7 +423,7 @@ class PublishingService:
             return None
         payload = updates.model_dump(exclude_unset=True)
         if payload.get("status") == "PUBLISHED" and pub.status != "PUBLISHED":
-            payload["published_at"] = datetime.utcnow()
+            payload["published_at"] = datetime.now(timezone.utc)
         pub = self.pub_repo.update(publication_id, payload)
         return PublicationResponse(**_pub_to_dict(pub)) if pub else None
 
@@ -579,7 +579,7 @@ class DecisionService:
                 "by": override_by,
                 "status": override_data.override_status,
                 "reason": override_data.override_reason,
-                "at": datetime.utcnow().isoformat(),
+                "at": datetime.now(timezone.utc).isoformat(),
             })
             log = self.repo.update(decision_id, {"reasoning": reasoning})
         logger.info(f"Decision overridden: {decision_id} by {override_by} -> {override_data.override_status}")

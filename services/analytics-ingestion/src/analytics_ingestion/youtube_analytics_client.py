@@ -6,7 +6,7 @@ import hashlib
 import json
 import logging
 from dataclasses import asdict, dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol
 from urllib.parse import urlencode
 
@@ -249,7 +249,7 @@ class YouTubeAnalyticsClient:
             )
 
             items = data.get("items", [])
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
 
             for item in items:
                 stats = item.get("statistics", {})
@@ -317,7 +317,7 @@ class YouTubeAnalyticsClient:
             view_count=int(stats.get("viewCount", 0)),
             estimated_minutes_watched=0.0,
             average_view_duration=0.0,
-            measured_at=datetime.utcnow(),
+            measured_at=datetime.now(timezone.utc),
         )
 
     async def fetch_analytics_report(

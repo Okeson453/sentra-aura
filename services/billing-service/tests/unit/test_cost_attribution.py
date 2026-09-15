@@ -1,14 +1,14 @@
 """Unit tests for cost attribution logic."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from billing_service.metering import MeteringEngine
 
 
 def test_cost_attribution_by_service():
     engine = MeteringEngine()
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     # Simulate multi-service usage
     engine.record_usage("t1", "c1", "agent-runtime", "llm_input_token", 100000)
@@ -28,7 +28,7 @@ def test_cost_attribution_by_service():
 
 def test_multi_tenant_isolation():
     engine = MeteringEngine()
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     engine.record_usage("tenant-a", "ch-a", "svc", "api_call", 1000)
     engine.record_usage("tenant-b", "ch-b", "svc", "api_call", 2000)
@@ -43,7 +43,7 @@ def test_multi_tenant_isolation():
 
 def test_zero_usage_period():
     engine = MeteringEngine()
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
 
     result = engine.aggregate_by_tenant("nonexistent", now - timedelta(days=1), now)
     assert result["total_cost_usd"] == 0.0

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 
 from analytics_ingestion.youtube_analytics_client import YouTubeAnalyticsClient, VideoMetrics
 
@@ -35,7 +35,7 @@ def test_video_metrics_dataclass():
         ctr=0.08,
         retention_curve=[1.0, 0.9, 0.8, 0.7, 0.6],
         subscriber_gain=89,
-        measured_at=datetime.utcnow(),
+        measured_at=datetime.now(timezone.utc),
     )
     assert metrics.video_id == "vid-123"
     assert metrics.views == 10000

@@ -1,7 +1,7 @@
 """Unit tests for billing metering engine."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from billing_service.metering import MeteringEngine
 
@@ -22,7 +22,7 @@ def test_record_usage():
 
 def test_aggregate_by_tenant():
     engine = MeteringEngine()
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     engine.record_usage("tenant-1", "ch-1", "svc", "llm_input_token", 1000)
     engine.record_usage("tenant-1", "ch-1", "svc", "llm_output_token", 500)
     engine.record_usage("tenant-2", "ch-2", "svc", "llm_input_token", 2000)
@@ -36,7 +36,7 @@ def test_aggregate_by_tenant():
 
 def test_aggregate_by_channel():
     engine = MeteringEngine()
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     engine.record_usage("tenant-1", "ch-1", "svc-a", "api_call", 100)
     engine.record_usage("tenant-1", "ch-1", "svc-b", "api_call", 200)
 

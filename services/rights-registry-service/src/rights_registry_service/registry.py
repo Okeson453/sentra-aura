@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -51,7 +51,7 @@ class RightsRegistry:
             "license_source": license_source,
             "owner_channel_id": owner_channel_id,
             "metadata": metadata or {},
-            "registered_at": datetime.utcnow().isoformat(),
+            "registered_at": datetime.now(timezone.utc).isoformat(),
             "claims": [],
             "disputes": [],
         }
@@ -75,12 +75,12 @@ class RightsRegistry:
         if not asset:
             raise KeyError(f"Asset not found: {asset_id}")
         claim = {
-            "claim_id": f"clm_{hashlib.sha256(f'{asset_id}{claimant}{datetime.utcnow()}'.encode()).hexdigest()[:16]}",
+            "claim_id": f"clm_{hashlib.sha256(f'{asset_id}{claimant}{datetime.now(timezone.utc)}'.encode()).hexdigest()[:16]}",
             "claim_type": claim_type,
             "claimant": claimant,
             "details": claim_details,
             "status": "open",
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
         asset["claims"].append(claim)
         logger.warning("Claim added to %s: %s by %s", asset_id, claim_type, claimant)
@@ -103,7 +103,7 @@ class RightsRegistry:
             "dispute_basis": dispute_basis,
             "evidence": evidence,
             "status": "filed",
-            "filed_at": datetime.utcnow().isoformat(),
+            "filed_at": datetime.now(timezone.utc).isoformat(),
         }
         asset["disputes"].append(dispute)
         logger.info("Dispute filed for %s: %s", asset_id, dispute_basis)
@@ -117,7 +117,7 @@ class RightsRegistry:
         for claim in asset["claims"]:
             if claim["claim_id"] == claim_id:
                 claim["status"] = resolution
-                claim["resolved_at"] = datetime.utcnow().isoformat()
+                claim["resolved_at"] = datetime.now(timezone.utc).isoformat()
                 logger.info("Claim %s resolved: %s", claim_id, resolution)
                 return claim
         raise KeyError(f"Claim not found: {claim_id}")

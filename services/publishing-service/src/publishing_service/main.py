@@ -10,7 +10,7 @@ import logging
 import time
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
@@ -43,8 +43,8 @@ class Publication(Base):
     scheduled_at = Column(DateTime)
     seo_metadata = Column(JSON, default={})
     tags = Column(JSON, default=[])
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
 class PublishJob(Base):
     __tablename__ = "publish_jobs"
@@ -52,7 +52,7 @@ class PublishJob(Base):
     publication_id = Column(String(36))
     status = Column(String(50), default="queued")
     platform_results = Column(JSON, default=[])
-    started_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     completed_at = Column(DateTime)
     error_message = Column(Text)
 
@@ -162,8 +162,8 @@ async def create_publication(request: Request, authorization: str = Depends(_ver
         scheduled_at=scheduled_at,
         seo_metadata=body.get("seo_metadata", {}),
         tags=body.get("tags", []),
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
     )
     db.add(pub)
     db.commit()
@@ -260,7 +260,7 @@ async def update_publication(publication_id: str, request: Request, authorizatio
         except (ValueError, TypeError):
             pub.scheduled_at = None
 
-    pub.updated_at = datetime.utcnow()
+    pub.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(pub)
 
@@ -297,7 +297,7 @@ async def publish_now(publication_id: str, request: Request, authorization: str 
         publication_id=publication_id,
         status="queued",
         platform_results=[],
-        started_at=datetime.utcnow(),
+        started_at=datetime.now(timezone.utc),
     )
     db.add(publish_job)
     db.commit()
@@ -371,9 +371,9 @@ async def _process_publish_job(db: Session, job_id: str, publication_id: str, pu
         publish_job.status = job_status
         publish_job.platform_results = platform_results
         publish_job.error_message = error_message
-        publish_job.completed_at = datetime.utcnow()
+        publish_job.completed_at = datetime.now(timezone.utc)
         pub.status = publication_status
-        pub.updated_at = datetime.utcnow()
+        pub.updated_at = datetime.now(timezone.utc)
         db.commit()
 
     except Exception as e:
@@ -381,7 +381,7 @@ async def _process_publish_job(db: Session, job_id: str, publication_id: str, pu
         if publish_job:
             publish_job.status = "failed"
             publish_job.error_message = str(e)
-            publish_job.completed_at = datetime.utcnow()
+            publish_job.completed_at = datetime.now(timezone.utc)
             db.commit()
 
 
@@ -438,7 +438,7 @@ async def schedule_publication(publication_id: str, request: Request, authorizat
         pub.scheduled_at = None
 
     pub.status = "scheduled"
-    pub.updated_at = datetime.utcnow()
+    pub.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(pub)
 
@@ -456,7 +456,7 @@ async def unpublish(publication_id: str, authorization: str = Depends(_verify_be
     if not pub:
         raise HTTPException(status_code=404, detail="Publication not found")
     pub.status = "archived"
-    pub.updated_at = datetime.utcnow()
+    pub.updated_at = datetime.now(timezone.utc)
     db.commit()
     return {"status": "unpublished", "publication_id": publication_id}
 

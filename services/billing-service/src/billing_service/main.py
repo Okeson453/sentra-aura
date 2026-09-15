@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, status
@@ -71,7 +71,7 @@ async def get_tenant_usage(
     days: int = Query(default=30, ge=1, le=365),
 ) -> dict[str, Any]:
     """Get aggregated usage for a tenant."""
-    end = datetime.utcnow()
+    end = datetime.now(timezone.utc)
     start = end - timedelta(days=days)
     return metering.aggregate_by_tenant(tenant_id, start, end)
 
@@ -82,7 +82,7 @@ async def get_channel_usage(
     days: int = Query(default=30, ge=1, le=365),
 ) -> dict[str, Any]:
     """Get aggregated usage for a channel."""
-    end = datetime.utcnow()
+    end = datetime.now(timezone.utc)
     start = end - timedelta(days=days)
     return metering.aggregate_by_channel(channel_id, start, end)
 
@@ -93,7 +93,7 @@ async def create_invoice(
     days: int = Query(default=30, ge=1, le=365),
 ) -> dict[str, Any]:
     """Generate an invoice for a tenant."""
-    end = datetime.utcnow()
+    end = datetime.now(timezone.utc)
     start = end - timedelta(days=days)
     usage = metering.aggregate_by_tenant(tenant_id, start, end)
     invoice = invoicing.generate_invoice(tenant_id, start, end, usage)
@@ -206,7 +206,7 @@ async def list_overdue_invoices(
             "tenant_id": inv.tenant_id,
             "total_usd": inv.total_usd,
             "due_date": inv.due_date.isoformat(),
-            "days_overdue": max(0, (datetime.utcnow() - inv.due_date).days),
+            "days_overdue": max(0, (datetime.now(timezone.utc) - inv.due_date).days),
         }
         for inv in invoices
     ]
@@ -250,7 +250,7 @@ async def get_budget_alerts(
     days: int = Query(default=30, ge=1, le=365),
 ) -> list[dict[str, Any]]:
     """Get budget threshold alerts."""
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(timezone.utc) - timedelta(days=days)
     alerts = metering.get_budget_alerts(tenant_id, since)
     return [
         {

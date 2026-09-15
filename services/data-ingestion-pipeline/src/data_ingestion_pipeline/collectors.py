@@ -11,7 +11,7 @@ import json
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
@@ -48,12 +48,12 @@ class BaseCollector(ABC):
         """Execute an HTTP request with rate limiting."""
         async with self._semaphore:
             if self._last_request_time:
-                elapsed = (datetime.utcnow() - self._last_request_time).total_seconds()
+                elapsed = (datetime.now(timezone.utc) - self._last_request_time).total_seconds()
                 min_interval = 1.0 / self.config.rate_limit_rps
                 if elapsed < min_interval:
                     await asyncio.sleep(min_interval - elapsed)
             async with httpx.AsyncClient(timeout=self.config.timeout_seconds, headers=self.config.headers) as client:
-                self._last_request_time = datetime.utcnow()
+                self._last_request_time = datetime.now(timezone.utc)
                 for attempt in range(self.config.retry_attempts):
                     try:
                         response = await client.request(method, url, **kwargs)
@@ -89,8 +89,8 @@ class YouTubeAnalyticsCollector(BaseCollector):
         channel_id = params.get("channel_id")
         if not channel_id:
             raise ValueError("channel_id is required")
-        start_date = params.get("start_date", (datetime.utcnow() - timedelta(days=7)).strftime("%Y-%m-%d"))
-        end_date = params.get("end_date", datetime.utcnow().strftime("%Y-%m-%d"))
+        start_date = params.get("start_date", (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d"))
+        end_date = params.get("end_date", datetime.now(timezone.utc).strftime("%Y-%m-%d"))
         metrics = params.get("metrics", "views,estimatedMinutesWatched,averageViewDuration")
         url = f"{self.config.base_url}/reports"
         query_params = {

@@ -175,8 +175,8 @@ class PolicyEngine:
 
     def _matches_temporal(self, condition: dict[str, Any], context: dict[str, Any]) -> bool:
         """Evaluate temporal constraints (time windows, schedules)."""
-        from datetime import datetime, time
-        now = datetime.utcnow()
+        from datetime import datetime, time, timezone
+        now = datetime.now(timezone.utc)
         if "allowed_hours" in condition:
             start_h, end_h = condition["allowed_hours"]
             if not (start_h <= now.hour <= end_h):

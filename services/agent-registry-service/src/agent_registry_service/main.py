@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query, Response, status
@@ -162,7 +162,7 @@ async def update_agent_health(agent_id: str, payload: dict[str, Any]) -> dict[st
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Agent {agent_id} not found")
     health_status = HealthStatus(payload.get("health", "unknown"))
     store.update_health(agent_id, health_status)
-    return {"agent_id": agent_id, "health": health_status.value, "updated_at": datetime.utcnow().isoformat()}
+    return {"agent_id": agent_id, "health": health_status.value, "updated_at": datetime.now(timezone.utc).isoformat()}
 
 
 @app.post("/api/v1/agents/{agent_id}/evaluations", response_model=EvaluationRecord)

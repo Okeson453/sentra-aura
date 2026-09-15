@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from agent_registry_service.models import (
@@ -40,7 +40,7 @@ class AgentStore:
         self._health[registration.agent_id] = AgentHealth(
             agent_id=registration.agent_id,
             status=HealthStatus.HEALTHY,
-            last_heartbeat=datetime.utcnow(),
+            last_heartbeat=datetime.now(timezone.utc),
         )
         self._versions.setdefault(registration.agent_id, []).append(
             AgentVersion(
@@ -58,7 +58,7 @@ class AgentStore:
         old = self._agents[agent_id]
         # Preserve registration timestamp
         registration.registered_at = old.registered_at
-        registration.updated_at = datetime.utcnow()
+        registration.updated_at = datetime.now(timezone.utc)
         self._agents[agent_id] = registration
         # Add version record if version changed
         if registration.version != old.version:
@@ -107,7 +107,7 @@ class AgentStore:
         self._health[agent_id] = AgentHealth(
             agent_id=agent_id,
             status=health_status,
-            last_heartbeat=datetime.utcnow(),
+            last_heartbeat=datetime.now(timezone.utc),
         )
 
     def get_health(self, agent_id: str) -> AgentHealth | None:

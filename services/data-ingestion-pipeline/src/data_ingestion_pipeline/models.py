@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -14,7 +14,7 @@ class RawEvent:
     source: str = ""
     source_type: str = ""
     raw_payload: dict[str, Any] = field(default_factory=dict)
-    collected_at: datetime = field(default_factory=datetime.utcnow)
+    collected_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     channel_id: str | None = None
     tenant_id: str | None = None
 
@@ -28,7 +28,7 @@ class NormalizedEvent:
     channel_id: str | None = None
     tenant_id: str | None = None
     payload: dict[str, Any] = field(default_factory=dict)
-    normalized_at: datetime = field(default_factory=datetime.utcnow)
+    normalized_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     metadata: dict[str, Any] = field(default_factory=dict)
 
 

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 from unittest.mock import MagicMock
 
@@ -37,7 +37,7 @@ class TestGraphTraversal:
         mock_db.execute.return_value.mappings.return_value.all.return_value = [
             {"id": uuid4(), "node_type": "VIDEO", "channel_id": "ch-1", "tenant_id": "t-1",
              "title": "Video", "description": "", "status": "ACTIVE", "version": 1,
-             "payload": {}, "created_at": datetime.utcnow(), "updated_at": datetime.utcnow(), "depth": 0},
+             "payload": {}, "created_at": datetime.now(timezone.utc), "updated_at": datetime.now(timezone.utc), "depth": 0},
         ]
         lineage = gt.get_lineage_path("node-1")
         assert len(lineage) == 1
@@ -48,7 +48,7 @@ class TestGraphTraversal:
         mock_db.execute.return_value.mappings.return_value.all.return_value = [
             {"id": uuid4(), "node_id": uuid4(), "record_type": "SOURCE", "agent_id": "agent-1",
              "action": "create", "inputs": {}, "outputs": {}, "metadata_json": {},
-             "created_at": datetime.utcnow()},
+             "created_at": datetime.now(timezone.utc)},
         ]
         records = gt.get_provenance_chain("node-1")
         assert len(records) == 1
@@ -59,7 +59,7 @@ class TestGraphTraversal:
         mock_db.execute.return_value.mappings.return_value.all.return_value = [
             {"id": uuid4(), "node_type": "SCRIPT", "channel_id": "ch-1", "tenant_id": "t-1",
              "title": "Script", "description": "", "status": "ACTIVE", "version": 1,
-             "payload": {}, "created_at": datetime.utcnow(), "updated_at": datetime.utcnow(), "depth": 1},
+             "payload": {}, "created_at": datetime.now(timezone.utc), "updated_at": datetime.now(timezone.utc), "depth": 1},
         ]
         result = gt.bfs("node-1", direction="in", max_depth=5)
         assert len(result.nodes) == 1
@@ -69,7 +69,7 @@ class TestGraphTraversal:
         mock_db.execute.return_value.mappings.return_value.all.return_value = [
             {"id": uuid4(), "node_type": "CLIP", "channel_id": "ch-1", "tenant_id": "t-1",
              "title": "Clip", "description": "", "status": "ACTIVE", "version": 1,
-             "payload": {}, "created_at": datetime.utcnow(), "updated_at": datetime.utcnow(), "depth": 1},
+             "payload": {}, "created_at": datetime.now(timezone.utc), "updated_at": datetime.now(timezone.utc), "depth": 1},
         ]
         result = gt.dfs("node-1", direction="out", max_depth=5)
         assert len(result.nodes) == 1
