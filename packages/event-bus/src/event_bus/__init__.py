@@ -11,6 +11,7 @@ from event_bus.client import (
     MockNATSClient,
     connect_nats,
     create_event_publisher,
+    ensure_dlq_stream,
 )
 
 __all__ = [
@@ -22,4 +23,5 @@ __all__ = [
     "MockNATSClient",
     "connect_nats",
     "create_event_publisher",
+    "ensure_dlq_stream",
 ]

@@ -27,6 +27,8 @@ class NATSClientConfig:
     stream_name: str = "SENTRAURA_EVENTS"
     subjects: list[str] = field(default_factory=lambda: ["sentra.>", "sentraura.>"])
     ensure_stream: bool = True
+    dlq_stream_name: str = "SENTRAURA_DLQ"
+    dlq_subject: str = "sentra.platform.dlq"
 
 
 class MockNATSClient:
@@ -34,15 +36,105 @@ class MockNATSClient:
 
     def __init__(self) -> None:
         self.published: list[tuple[str, bytes]] = []
+        self._subs: dict[str, list[Any]] = {}
 
     async def publish(self, subject: str, payload: bytes) -> None:
         self.published.append((subject, payload))
+        for pattern, callbacks in self._subs.items():
+            if _subject_matches(subject, pattern):
+                for cb in callbacks:
+                    delivered = _MockMsg(subject, payload)
+                    result = cb(delivered)
+                    if asyncio.iscoroutine(result):
+                        await result
+
+    async def subscribe(self, subject: str, cb: Any = None, **kwargs: Any) -> None:
+        if cb is not None:
+            self._subs.setdefault(subject, []).append(cb)
 
     def jetstream(self) -> "MockNATSClient":
         return self
 
+    async def add_stream(self, config: Any = None) -> None:
+        return None
+
     async def close(self) -> None:
         return None
+
+
+class _MockMsg:
+    """Minimal message stub so consumer callbacks work against the mock."""
+
+    def __init__(self, subject: str, data: bytes) -> None:
+        self.subject = subject
+        self.data = data
+        self.acked = False
+        self.naked = False
+
+    async def ack(self) -> None:
+        self.acked = True
+
+    async def nak(self) -> None:
+        self.naked = True
+
+
+def _subject_matches(subject: str, pattern: str) -> bool:
+    if pattern == subject:
+        return True
+    if pattern.endswith(".>"):
+        return subject.startswith(pattern[:-2])
+    if pattern.endswith(".*"):
+        return subject.startswith(pattern[:-1])
+    return False
+
+
+async def ensure_dlq_stream(
+    nats_client: Any,
+    *,
+    stream_name: str = "SENTRAURA_DLQ",
+    dlq_subject: str = "sentra.platform.dlq",
+) -> bool:
+    """Bind a JetStream stream to the dead-letter subject.
+
+    ``EventConsumer`` writes failures to a plain subject. Without a stream
+    bound to that subject the write is a core-NATS publish: it reaches any
+    *currently connected* subscriber and is then discarded, so a failed event
+    is lost the moment nobody is listening. Binding a stream is what makes the
+    DLQ durable and replayable. Returns True when a stream was ensured.
+    """
+    try:
+        from nats.js.api import RetentionPolicy, StorageType, StreamConfig
+    except ImportError:  # pragma: no cover - dependency guarded elsewhere
+        return False
+
+    js_getter = getattr(nats_client, "jetstream", None)
+    if js_getter is None:
+        return False
+    try:
+        js = js_getter()
+    except Exception:
+        return False
+    if js is None or not hasattr(js, "add_stream"):
+        return False
+    try:
+        await js.add_stream(
+            StreamConfig(
+                name=stream_name,
+                subjects=[dlq_subject],
+                retention=RetentionPolicy.WORK_QUEUE,
+                storage=StorageType.FILE,
+                max_msgs=100_000,
+            )
+        )
+        logger.info("DLQ stream %s bound to %s", stream_name, dlq_subject)
+        return True
+    except Exception as exc:
+        msg = str(exc).lower()
+        if "already in use" in msg or "already exists" in msg:
+            logger.info("DLQ stream %s already exists", stream_name)
+            return True
+        logger.warning("Could not ensure DLQ stream %s: %s", stream_name, exc)
+        return False
 
 
 async def connect_nats(config: NATSClientConfig | None = None) -> Any:
@@ -50,7 +142,7 @@ async def connect_nats(config: NATSClientConfig | None = None) -> Any:
 
     Returns a live ``nats.NATS`` client (or ``MockNATSClient`` when mock_mode).
     Raises ``RuntimeError`` if the transport cannot be established and mock_mode
-    is false — fail closed rather than silently dropping events.
+    is false \u2014 fail closed rather than silently dropping events.
     """
     cfg = config or NATSClientConfig()
     if cfg.mock_mode:
@@ -97,6 +189,13 @@ async def connect_nats(config: NATSClientConfig | None = None) -> Any:
                     msg = str(stream_exc).lower()
                     if "already in use" not in msg and "already exists" not in msg and "name" not in msg:
                         logger.debug("stream ensure note: %s", stream_exc)
+                # The dead-letter subject is not covered by the main stream's
+                # subjects, so it needs its own stream or DLQ writes are lost.
+                await ensure_dlq_stream(
+                    nc,
+                    stream_name=cfg.dlq_stream_name,
+                    dlq_subject=cfg.dlq_subject,
+                )
             logger.info("event-bus connected to NATS servers=%s", cfg.servers)
             return nc
         except Exception as exc:
