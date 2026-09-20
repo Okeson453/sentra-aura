@@ -67,6 +67,8 @@ env:
     value: "service.name={{ .Values.serviceName }},deployment.environment=dev"
   - name: NATS_URL
     value: "nats://nats.nats.svc.cluster.local:4222"
+  - name: NATS_MOCK_MODE
+    value: "true"
   - name: TEMPORAL_HOST
     value: "temporal-frontend.temporal.svc.cluster.local:7233"
   - name: DB_HOST
