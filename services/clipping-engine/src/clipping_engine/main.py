@@ -89,6 +89,60 @@ async def readiness_check(db: Session = Depends(get_db)) -> dict[str, Any]:
     }
 
 
+_CLIP_TYPE_ENUM = ("HOOK", "QUOTE", "HIGHLIGHT", "EDUCATIONAL", "STORY", "SERIES", "COMPILATION")
+
+
+def _infer_clip_type(feats: dict[str, Any], duration_seconds: float) -> str:
+    """Deterministic first-pass clip classification from real ClipScore features.
+
+    ``contracts/events/v1/clip_candidate_created.json`` requires ``clip_type``
+    drawn from a fixed enum. Until a learned classifier replaces it, the value
+    is derived from measured features rather than invented: short high-hook
+    segments are HOOKs, highly quotable short segments are QUOTEs, long
+    multi-beat narrative segments are STORYs, everything else HIGHLIGHT.
+    """
+    hook = float(feats.get("hook") or 0.0)
+    quotability = float(feats.get("quotability") or 0.0)
+    narrative = float(feats.get("narrative") or 0.0)
+    if duration_seconds <= 20 and hook >= 0.6:
+        return "HOOK"
+    if quotability >= 0.65 and duration_seconds <= 45:
+        return "QUOTE"
+    if duration_seconds > 90 and narrative >= 0.7:
+        return "STORY"
+    return "HIGHLIGHT"
+
+
+def _clip_candidates_payload(candidates: list) -> list[dict[str, Any]]:
+    """Map engine-scored candidates onto the published ``clip_candidates`` schema."""
+    out: list[dict[str, Any]] = []
+    for idx, cand in enumerate(candidates or []):
+        if not isinstance(cand, dict):
+            continue
+        feats = cand.get("scores") if isinstance(cand.get("scores"), dict) else {}
+        start = float(cand.get("start_seconds") or 0.0)
+        end = float(cand.get("end_seconds") or start)
+        duration = float(cand.get("duration_seconds") or max(0.0, end - start))
+        composite = float(cand.get("composite") or cand.get("score") or 0.0)
+        out.append(
+            {
+                "candidate_id": str(
+                    cand.get("segment_id") or cand.get("clip_id") or f"cand-{idx}"
+                ),
+                "start_ms": int(round(start * 1000)),
+                "end_ms": int(round(end * 1000)),
+                "clip_type": _infer_clip_type(feats, duration),
+                "clip_score": round(composite, 3),
+                "context_score": round(
+                    max(0.0, 1.0 - float(feats.get("context_dependency") or 0.0)), 3
+                ),
+                "hook_score": round(float(feats.get("hook") or 0.0), 3),
+                "retention_prediction": round(composite, 3),
+            }
+        )
+    return out
+
+
 async def _publish_clip_candidates(
     job_id: str,
     video_id: str,
@@ -96,40 +150,46 @@ async def _publish_clip_candidates(
     tenant_id: str,
     candidates: list,
 ) -> None:
-    """Publish clip_candidate_created via packages/event-bus (shared backbone)."""
+    """Publish ``clip.candidate.created`` via packages/event-bus.
+
+    Emissions must satisfy contracts/events/v1/clip_candidate_created.json, so the
+    payload is built from real engine output and the validated publish path is the
+    only path used — schema failures are surfaced, never bypassed.
+    """
     import os
     try:
         from event_bus import create_event_publisher
     except ImportError:
+        logger.warning("event_bus package unavailable; clip candidate event not published")
         return
-    mock = os.environ.get("NATS_MOCK_MODE", "true").lower() in ("1", "true", "yes")
-    nats_url = os.environ.get("NATS_URL", getattr(config, "nats_url", None) or "nats://localhost:4222")
+    # Fail-safe default: real NATS. Deployments must opt IN to mock mode.
+    mock = os.environ.get("NATS_MOCK_MODE", "false").lower() in ("1", "true", "yes")
+    nats_url = os.environ.get("NATS_URL") or "nats://localhost:4222"
+    event = {
+        "event_id": str(uuid.uuid4()),
+        "event_type": "clip.candidate.created",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "channel_id": channel_id or "system",
+        "tenant_id": tenant_id or "system",
+        "source_video_id": video_id or "",
+        "job_id": job_id,
+        "candidate_count": len(candidates or []),
+        "clip_candidates": _clip_candidates_payload(candidates),
+    }
     nc, publisher = await create_event_publisher(nats_url=nats_url, mock_mode=mock)
     try:
-        event = {
-            "event_type": "clip_candidate_created",
-            "job_id": job_id,
-            "video_id": video_id,
-            "channel_id": channel_id or "system",
-            "tenant_id": tenant_id or "system",
-            "candidate_count": len(candidates or []),
-        }
-        try:
-            await publisher.publish(
-                event,
-                channel_id=event["channel_id"],
-                event_family="clip",
-                event_type="clip_candidate_created",
-                schema_name="clip_candidate_created.json",
-            )
-        except Exception:
-            await publisher.publish_platform(event, event_type="clip_candidate_created")
+        await publisher.publish(
+            event,
+            channel_id=event["channel_id"],
+            event_family="clip",
+            event_type="clip_candidate_created",
+            schema_name="clip_candidate_created.json",
+        )
     finally:
         try:
             await nc.close()
         except Exception:
             pass
-
 
 
 @app.post("/clips/detect")
@@ -193,7 +253,7 @@ async def detect_clips(request: Request, authorization: str = Depends(_verify_be
     try:
         await _publish_clip_candidates(job_id, video_id, channel_id, tenant_id, candidates)
     except Exception as pub_exc:
-        logger.warning("event-bus clip_candidate publish skipped: %s", pub_exc)
+        logger.error("clip_candidate_created publish failed: %s", pub_exc)
 
     return {
         "job_id": job_id,
