@@ -9,6 +9,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from media_renderer.assembly.compositor import Compositor
@@ -175,6 +177,9 @@ class RenderWorker:
                                 job.job_id,
                                 job.output_url[:120],
                             )
+                            # Architecture §4/§32: a completed render must emit
+                            # video.rendered so downstream stages can react.
+                            await self._publish_video_rendered(job)
                         else:
                             job.status = "failed"
                             job.error_message = "encode produced empty or missing file"
@@ -211,26 +216,65 @@ class RenderWorker:
         finally:
             db.close()
 
+    def _build_video_rendered_event(self, job: Any) -> dict[str, Any]:
+        """Build a ``video.rendered`` payload that satisfies its published contract.
+
+        Pure function (no I/O) so the contract can be verified by tests without a
+        broker. Optional fields are only emitted when they carry real values.
+        """
+        metadata = getattr(job, "metadata_json", None)
+        plan = getattr(job, "render_plan", None)
+        script_id = ""
+        for source in (metadata, plan):
+            if isinstance(source, dict) and source.get("script_id"):
+                script_id = str(source["script_id"])
+                break
+        if not script_id:
+            # No script lineage on the job: fall back to the render job's own
+            # project id so the required field stays a real, traceable value.
+            script_id = str(getattr(job, "project_id", "") or "")
+
+        event: dict[str, Any] = {
+            "event_id": str(uuid.uuid4()),
+            "event_type": "video.rendered",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "channel_id": getattr(job, "channel_id", "") or "system",
+            "tenant_id": getattr(job, "tenant_id", "") or "system",
+            "video_id": str(getattr(job, "job_id", "") or ""),
+            "script_id": script_id,
+        }
+        duration = getattr(job, "duration_seconds", None)
+        if duration:
+            event["duration_seconds"] = int(duration)
+        resolution = getattr(job, "resolution", "") or ""
+        if resolution:
+            event["resolution"] = resolution
+        output_url = getattr(job, "output_url", "") or ""
+        if output_url:
+            event["asset_urls"] = {"output": output_url}
+        return event
+
     async def _publish_video_rendered(self, job: Any) -> None:
-        """Publish video_rendered via shared packages/event-bus (Architecture §4/§32)."""
+        """Publish ``video.rendered`` via packages/event-bus (Architecture §4/§32).
+
+        The payload is built to satisfy contracts/events/v1/video_rendered.json —
+        required fields are always present, and optional fields are only emitted when
+        they carry real values (never fabricated). Publication failure is logged
+        loudly but does NOT fail the render: the artifact itself succeeded.
+        """
         import os
         try:
             from event_bus import create_event_publisher
         except ImportError:
-            logger.debug("event_bus package not importable; skip publish")
+            logger.error("event_bus package not importable; video_rendered event NOT published")
             return
-        mock = os.environ.get("NATS_MOCK_MODE", "true").lower() in ("1", "true", "yes")
-        nats_url = os.environ.get("NATS_URL", "nats://localhost:4222")
+        # Fail-safe default: real NATS. Deployments must opt IN to mock mode.
+        mock = os.environ.get("NATS_MOCK_MODE", "false").lower() in ("1", "true", "yes")
+        nats_url = os.environ.get("NATS_URL") or "nats://localhost:4222"
+        event = self._build_video_rendered_event(job)
+
         nc, publisher = await create_event_publisher(nats_url=nats_url, mock_mode=mock)
         try:
-            event = {
-                "event_type": "video_rendered",
-                "job_id": getattr(job, "job_id", ""),
-                "channel_id": getattr(job, "channel_id", "") or "system",
-                "tenant_id": getattr(job, "tenant_id", "") or "system",
-                "output_url": getattr(job, "output_url", "") or "",
-                "status": "completed",
-            }
             await publisher.publish(
                 event,
                 channel_id=event["channel_id"],
@@ -239,18 +283,14 @@ class RenderWorker:
                 schema_name="video_rendered.json",
             )
         except Exception as exc:
-            # Schema may reject incomplete payloads — still best-effort
-            logger.debug("video_rendered publish note: %s", exc)
-            try:
-                await publisher.publish_platform(event, event_type="video_rendered")
-            except Exception:
-                pass
+            # No unvalidated fallback: an event that cannot meet its contract is
+            # reported, not silently re-published around the validator.
+            logger.error("video_rendered event publish failed: %s", exc)
         finally:
             try:
                 await nc.close()
             except Exception:
                 pass
-
 
     async def process_job(
         self,
