@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session, declarative_base, sessionmaker
 from sqlalchemy.pool import QueuePool
 
 from publishing_service.config import ServiceConfig
+from publishing_service.feedback import publish_publication_published
 
 logger = logging.getLogger(__name__)
 
@@ -303,7 +304,7 @@ async def publish_now(publication_id: str, request: Request, authorization: str 
     db.commit()
 
     # Process publishing asynchronously
-    asyncio.create_task(_process_publish_job(db, job_id, publication_id, pub))
+    asyncio.create_task(_process_publish_job(job_id, publication_id))
 
     return {
         "job_id": job_id,
@@ -313,14 +314,28 @@ async def publish_now(publication_id: str, request: Request, authorization: str 
     }
 
 
-async def _process_publish_job(db: Session, job_id: str, publication_id: str, pub: Publication) -> None:
-    """Background task to process publish job.
+async def _process_publish_job(job_id: str, publication_id: str) -> None:
+    """Background task to process a publish job.
 
     Calls platform adapters to perform actual publishing.
+
+    Opens its own session and re-reads the publication: the request-scoped
+    session from ``get_db`` is closed the moment the request returns, so using
+    it here (and holding a detached ORM instance) meant the job could never
+    complete in production.
     """
+    db = SessionLocal()
     try:
         publish_job = db.query(PublishJob).filter(PublishJob.job_id == job_id).first()
         if not publish_job:
+            return
+
+        pub = db.query(Publication).filter(Publication.publication_id == publication_id).first()
+        if pub is None:
+            publish_job.status = "failed"
+            publish_job.error_message = f"Publication {publication_id} not found"
+            publish_job.completed_at = datetime.now(timezone.utc)
+            db.commit()
             return
 
         platform_results = []
@@ -376,6 +391,22 @@ async def _process_publish_job(db: Session, job_id: str, publication_id: str, pu
         pub.updated_at = datetime.now(timezone.utc)
         db.commit()
 
+        # Close the feedback loop: announce only platforms that actually
+        # confirmed publication, so no false "published" signal is emitted and
+        # analytics only ever measures content that really went live.
+        try:
+            emitted = await publish_publication_published(pub, platform_results)
+            if emitted:
+                logger.info(
+                    "emitted %d publication.published event(s) for %s",
+                    emitted,
+                    publication_id,
+                )
+        except Exception as exc:
+            logger.error(
+                "failed to emit publication.published for %s: %s", publication_id, exc
+            )
+
     except Exception as e:
         publish_job = db.query(PublishJob).filter(PublishJob.job_id == job_id).first()
         if publish_job:
@@ -383,6 +414,8 @@ async def _process_publish_job(db: Session, job_id: str, publication_id: str, pu
             publish_job.error_message = str(e)
             publish_job.completed_at = datetime.now(timezone.utc)
             db.commit()
+    finally:
+        db.close()
 
 
 async def _publish_to_platform(platform_id: str, pub: Publication) -> dict[str, Any]:
