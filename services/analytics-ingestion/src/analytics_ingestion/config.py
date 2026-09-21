@@ -24,6 +24,7 @@ class AnalyticsConfig(BaseSettings):
     video_metrics_fetch_interval_seconds: int = Field(default=900)
     channel_health_check_interval_seconds: int = Field(default=300)
     max_videos_per_channel_fetch: int = Field(default=50)
+    enable_background_ingestion: bool = Field(default=True)
 
 
 config = AnalyticsConfig()

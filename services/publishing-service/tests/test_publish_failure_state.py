@@ -43,12 +43,16 @@ async def test_platform_failure_does_not_mark_job_or_publication_success(monkeyp
         raise RuntimeError("YouTube rejected upload")
 
     monkeypatch.setattr(main, "_publish_to_platform", failed_publish)
+    # The job opens its own session and re-reads the publication: the request
+    # scoped session handed to the endpoint is closed as soon as the request
+    # returns, so passing it (and a detached instance) here could never work in
+    # production. Give the job its own session from the same engine (it closes
+    # that one), and assert through this test's still-open session.
+    monkeypatch.setattr(main, "SessionLocal", sessionmaker(bind=engine))
     try:
         await main._process_publish_job(
-            session,
             job.job_id,
             publication.publication_id,
-            publication,
         )
         session.refresh(job)
         session.refresh(publication)
