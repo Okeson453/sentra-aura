@@ -10,6 +10,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from publishing_service import main
+from publishing_service import policy_gate
 
 
 @pytest.mark.asyncio
@@ -42,6 +43,13 @@ async def test_platform_failure_does_not_mark_job_or_publication_success(monkeyp
     async def failed_publish(platform_id: str, pub: main.Publication) -> dict[str, object]:
         raise RuntimeError("YouTube rejected upload")
 
+    async def approved(**kwargs) -> dict[str, object]:
+        # This test is about what happens when the *platform* fails, so the
+        # governance gate (a separate, orthogonal precondition added later) is
+        # approved here to let execution reach the adapter it exercises.
+        return {"approved": True, "overall_risk": 0.1, "policy_version": 1}
+
+    monkeypatch.setattr(policy_gate, "require_publish_approval", approved)
     monkeypatch.setattr(main, "_publish_to_platform", failed_publish)
     # The job opens its own session and re-reads the publication: the request
     # scoped session handed to the endpoint is closed as soon as the request
