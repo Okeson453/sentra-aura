@@ -17,6 +17,10 @@ from orchestrator.config import _INSECURE_JWT_DEFAULTS, get_settings
 
 logger = logging.getLogger(__name__)
 
+#: Tenant recorded for content with no tenant lineage. Matches the analytics
+#: service's own fallback so the two agree instead of the event being dropped.
+UNATTRIBUTED_TENANT = "system"
+
 # Configuration for service endpoints
 SERVICES = {
     "research-service": "http://research-service:8000",
@@ -29,12 +33,22 @@ SERVICES = {
     "policy-engine": "http://policy-engine:8000",
 }
 
-async def _call_service(service_name: str, endpoint: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+async def _call_service(
+    service_name: str,
+    endpoint: str,
+    payload: dict[str, Any] | None = None,
+    tenant_id: str | None = None,
+) -> dict[str, Any]:
     """Call an internal service with retry logic.
 
     The service must exist in the SERVICES map: a missing entry is a configuration
     defect, not a reason to silently retarget the call at localhost:8000 (which
     would produce a connection error that is indistinguishable from a real outage).
+
+    ``tenant_id`` is carried as a **claim in the signed token**, never as a
+    header or body field a caller could set. Downstream services derive the
+    acting tenant from that claim, so a call without one is legitimately
+    rejected (fail closed) rather than quietly running unscoped.
     """
     base = SERVICES.get(service_name)
     if base is None:
@@ -58,6 +72,7 @@ async def _call_service(service_name: str, endpoint: str, payload: dict[str, Any
         secret=signing_secret,
         ttl_seconds=settings.service_auth_token_ttl_seconds,
         algorithm=settings.jwt_algorithm,
+        tenant_id=tenant_id,
     )
     headers = {
         "Authorization": f"Bearer {token}",
@@ -99,6 +114,7 @@ async def _call_service_or_raise(
     *,
     activity_name: str,
     default_status: str = "failed",
+    tenant_id: str | None = None,
     **extra: Any,
 ) -> dict[str, Any]:
     """Call a service, keeping the existing activity-shaped result contract.
@@ -109,9 +125,19 @@ async def _call_service_or_raise(
     failure dict lets Temporal replay mark the activity COMPLETED, so workflow
     retry policies and crash-recovery never engage and a broken dependency is
     silently reported to the caller as a success.
+
+    ``tenant_id`` is *not* part of ``extra``: it is an explicit parameter so it
+    reaches the signed token as a claim. Were it swept into ``**extra`` it would
+    be echoed into the activity result and never reach the downstream service,
+    which fail-closed rejects.
     """
     try:
-        result = await _call_service(service_name, endpoint, payload)
+        # Forward the tenant only when there is one, so callers (and test doubles)
+        # that predate tenant attribution keep working unchanged.
+        call_kwargs: dict[str, Any] = {}
+        if tenant_id is not None:
+            call_kwargs["tenant_id"] = tenant_id
+        result = await _call_service(service_name, endpoint, payload, **call_kwargs)
     except Exception as exc:
         logger.error(f"{activity_name} failed: {exc}")
         raise
@@ -317,7 +343,7 @@ async def publish_content(channel_id: str, video_id: str, clips: dict[str, Any],
         "platforms": ["youtube"],
         "tags": script.get("tags", []),
     }
-    
+
     try:
         video_result = await _call_service("publishing-service", "/publications", video_pub)
         video_publication_id = video_result.get("publication_id")
@@ -373,42 +399,68 @@ async def publish_content(channel_id: str, video_id: str, clips: dict[str, Any],
 
 @activity.defn
 async def record_analytics(channel_id: str, video_id: str, publish_result: dict[str, Any], clips: dict[str, Any]) -> dict[str, Any]:
-    """Record analytics by calling the analytics-ingestion service."""
+    """Record the publication outcome as the loop's first feedback datum.
+
+    This posts to ``/api/v1/analytics/record``. It previously posted to
+    ``/api/v1/tasks/status``, which analytics-ingestion exposes as a **GET-only**
+    route, so every attempt returned 405 and the measurement step of the
+    feedback loop recorded nothing at all.
+    """
     payload = {
         "channel_id": channel_id,
         "video_id": video_id,
         "publish_result": publish_result,
         "clips": clips,
+        "tenant_id": publish_result.get("tenant_id"),
         "event_type": "publication_complete",
     }
     result = await _call_service_or_raise(
         "analytics-ingestion",
-        "/api/v1/tasks/status",
+        "/api/v1/analytics/record",
         payload,
         activity_name="record_analytics",
         channel_id=channel_id,
         video_id=video_id,
+        tenant_id=payload["tenant_id"] or UNATTRIBUTED_TENANT,
     )
     return {
         "channel_id": channel_id,
         "video_id": video_id,
         "event_id": result.get("event_id", ""),
+        "measurement_status": result.get("measurement_status", "unknown"),
+        "platform_video_id": result.get("platform_video_id"),
         "status": "completed",
     }
 
 
 @activity.defn
 async def update_learning(channel_id: str, video_id: str, analytics_result: dict[str, Any], clips: dict[str, Any]) -> dict[str, Any]:
-    """Update learning models by calling the analytics-ingestion service."""
-    # Trigger signal computation over the persisted metrics history so the
-    # feedback path reaches the learning layer rather than a nonexistent route.
+    """Update learning from measured performance by calling analytics-ingestion.
+
+    ``/api/v1/signals`` computes a performance signal from ``NormalizedMetrics``
+    rows. This activity previously forwarded the *recording acknowledgement*
+    produced by ``record_analytics``, which is not a NormalizedMetrics record, so
+    the service rejected it with 400 and the learning leg of the loop never
+    produced a signal. Rather than fabricate metric values to make the call
+    succeed, the activity now states its precondition plainly when the measured
+    metrics are absent.
+    """
+    metrics_history = analytics_result.get("normalized_metrics")
+    if not metrics_history:
+        raise ValueError(
+            "update_learning requires 'normalized_metrics' (NormalizedMetrics rows) "
+            f"measured for channel={channel_id} video={video_id}; none were supplied. "
+            "Wire the metrics path to populate them before enabling the learning "
+            "leg."
+        )
     result = await _call_service_or_raise(
         "analytics-ingestion",
         "/api/v1/signals",
-        {"metrics_history": [analytics_result]},
+        {"metrics_history": metrics_history},
         activity_name="update_learning",
         channel_id=channel_id,
         video_id=video_id,
+        tenant_id=analytics_result.get("tenant_id") or UNATTRIBUTED_TENANT,
     )
     return {
         "channel_id": channel_id,
