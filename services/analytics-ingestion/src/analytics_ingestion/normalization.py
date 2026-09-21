@@ -26,6 +26,19 @@ class NormalizedMetrics:
     measured_at: datetime
 
 
+def _utcnow_naive() -> datetime:
+    """Current UTC time as a *naive* datetime.
+
+    This module standardises on a single naive-UTC representation for
+    ``measured_at`` (see :func:`_coerce_datetime`). Subtracting an aware
+    ``datetime.now(timezone.utc)`` from a naive value raises ``TypeError: can't
+    subtract offset-naive and offset-aware datetimes``, which made every
+    ``POST /api/v1/normalize`` return 400. Both sides of the age calculation
+    therefore come from here, so the two can never disagree about tz-awareness.
+    """
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 def _coerce_datetime(value: Any) -> datetime:
     """Return ``value`` as a naive UTC datetime.
 
@@ -36,11 +49,11 @@ def _coerce_datetime(value: Any) -> datetime:
     ``TypeError`` and turning every /api/v1/normalize request into a 400.
     """
     if value is None:
-        return datetime.now(timezone.utc)
+        return _utcnow_naive()
     if isinstance(value, datetime):
         parsed = value
     elif isinstance(value, (int, float)):
-        return datetime.utcfromtimestamp(value)
+        return datetime.fromtimestamp(value, tz=timezone.utc).replace(tzinfo=None)
     elif isinstance(value, str):
         text = value.strip()
         if text.endswith(("Z", "z")):
@@ -49,13 +62,13 @@ def _coerce_datetime(value: Any) -> datetime:
             parsed = datetime.fromisoformat(text)
         except ValueError:
             logger.warning("Unparseable measured_at %r; defaulting to utcnow()", value)
-            return datetime.now(timezone.utc)
+            return _utcnow_naive()
     else:
         logger.warning("Unsupported measured_at type %s; defaulting to utcnow()", type(value))
-        return datetime.now(timezone.utc)
+        return _utcnow_naive()
 
     # Keep a single naive-UTC representation: the rest of this module compares
-    # against datetime.now(timezone.utc), which raises when mixed with aware datetimes.
+    # against _utcnow_naive(), which raises when mixed with aware datetimes.
     if parsed.tzinfo is not None:
         parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
     return parsed
@@ -105,8 +118,9 @@ def normalize_metrics(
     engagement = (likes + comments) / max(1, views)
     norm_engagement = _safe_ratio(engagement, channel_baseline.get("avg_engagement", 0.02))
 
-    # Time-decay weighting
-    age_days = (datetime.now(timezone.utc) - measured_at).total_seconds() / 86400
+    # Time-decay weighting. ``measured_at`` is naive UTC (see _coerce_datetime),
+    # so "now" must be naive UTC too or the subtraction raises TypeError.
+    age_days = (_utcnow_naive() - measured_at).total_seconds() / 86400
     decay_factor = math.exp(-age_days * math.log(2) / 7.0)  # 7-day half-life
 
     # Composite score (weighted sum)
