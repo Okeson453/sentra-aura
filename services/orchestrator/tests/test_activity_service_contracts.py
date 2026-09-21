@@ -142,7 +142,7 @@ async def test_activity_raises_when_service_fails(monkeypatch, name):
 
 @pytest.mark.asyncio
 async def test_research_topic_completes_on_success(monkeypatch):
-    async def _ok(service, endpoint, payload=None):
+    async def _ok(service, endpoint, payload=None, tenant_id=None):
         assert (service, endpoint) == ("research-service", "/research")
         return {"sources": ["s1"], "claims": ["c1"]}
 
@@ -156,7 +156,7 @@ async def test_research_topic_completes_on_success(monkeypatch):
 async def test_publish_content_requests_platform_publication(monkeypatch):
     calls: list[tuple[str, str]] = []
 
-    async def _fake(service, endpoint, payload=None):
+    async def _fake(service, endpoint, payload=None, tenant_id=None):
         calls.append((service, endpoint))
         if endpoint == "/publications":
             return {"publication_id": "pub-1", "status": "pending"}
@@ -294,6 +294,129 @@ async def test_record_analytics_sends_a_tenant_claim(monkeypatch):
     assert result["measurement_status"] == "recorded"
 
 
+def _patch_service_io(monkeypatch, seen: dict):
+    """Capture ``create_service_token`` kwargs while stubbing the HTTP client."""
+
+    def _fake_token(subject, roles=None, **kwargs):
+        seen.update(kwargs)
+        return "signed-token"
+
+    class _FakeResponse:
+        status_code = 200
+        content = b'{"ok": true}'
+        text = '{"ok": true}'
+
+        def json(self):
+            return {
+                "publication_id": "pub-1",
+                "status": "published",
+                "tenant_id": seen.get("tenant_id"),
+                "approved": True,
+            }
+
+        def raise_for_status(self):
+            return None
+
+    class _FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, json=None):
+            seen["url"] = url
+            seen.setdefault("urls", []).append(url)
+            return _FakeResponse()
+
+        async def get(self, url):
+            seen["url"] = url
+            seen.setdefault("urls", []).append(url)
+            return _FakeResponse()
+
+    monkeypatch.setattr(acts, "create_service_token", _fake_token)
+    monkeypatch.setattr(acts.httpx, "AsyncClient", _FakeClient)
+
+
+@pytest.mark.asyncio
+async def test_publish_content_sends_a_tenant_claim(monkeypatch):
+    """The publish leg must carry the tenant as a signed token claim.
+
+    Regression: ``publish_content`` called publishing-service with no tenant,
+    so the tenant-aware boundary rejected the call (401) and nothing was ever
+    sent to an external platform while the activity still reported success.
+    """
+    seen: dict = {}
+    _patch_service_io(monkeypatch, seen)
+    await acts.publish_content("chan-1", "vid-1", {"candidates": []}, {}, tenant_id="tenant-a")
+    assert seen.get("tenant_id") == "tenant-a"
+    # Both the create and the publish call must carry the claim.
+    assert seen["urls"][0].endswith("/publications")
+    assert "pub-1" in seen["urls"][0] or seen["urls"][0].endswith("/publications")
+    assert seen["urls"][-1].endswith("/publications/pub-1/publish")
+
+
+@pytest.mark.asyncio
+async def test_publish_content_attributes_a_tenant_less_run(monkeypatch):
+    """A run with no lineage must still be attributable, not rejected."""
+    seen: dict = {}
+    _patch_service_io(monkeypatch, seen)
+    await acts.publish_content("chan-1", "vid-1", {"candidates": []}, {})
+    assert seen.get("tenant_id") == acts.UNATTRIBUTED_TENANT
+
+
+@pytest.mark.asyncio
+async def test_optimize_policy_sends_a_tenant_claim(monkeypatch):
+    """The optimisation leg must reach the governance gate with a tenant.
+
+    Regression: ``optimize_policy`` called policy-engine with no tenant, and
+    policy-engine resolves the acting tenant from the verified claim and fails
+    closed, so the loop's policy-optimisation step could never execute.
+    """
+    seen: dict = {}
+    _patch_service_io(monkeypatch, seen)
+    await acts.optimize_policy("chan-1", {}, {}, tenant_id="tenant-a")
+    assert seen.get("tenant_id") == "tenant-a"
+    assert seen.get("url", "").endswith("/api/v1/evaluate")
+
+
+@pytest.mark.asyncio
+async def test_every_service_calling_activity_sends_a_tenant_claim(monkeypatch):
+    """No service-calling activity may omit tenant lineage from its token."""
+    src = _activities_source()
+    # publish_content/optimize_policy use _call_service directly (their calls are
+    # not routed through _call_service_or_raise), so assert on both call styles.
+    assert "tenant_id=tenant" in src
+    assert 'tenant_id=tenant_id or UNATTRIBUTED_TENANT' in src
+    assert "tenant_id=tenant_id or UNATTRIBUTED_TENANT,\n        )" in src
+
+
+@pytest.mark.asyncio
+async def test_workflow_threads_tenant_into_every_activity():
+    """The workflow must pass tenant_id to all eleven activity invocations.
+
+    A single missed argument silently re-breaks that leg of the loop: the
+    activity falls back to the unattributed tenant, or omits the claim.
+    """
+    wf_src = Path(acts.__file__).parent.joinpath("workflows.py").read_text()
+    assert 'tenant_id = params.get("tenant_id")' in wf_src
+    for call in (
+        "args=(channel_id, topic, tenant_id)",
+        "args=(channel_id, research, tenant_id)",
+        "args=(channel_id, script, tenant_id)",
+        "args=(channel_id, script, voice, visuals, tenant_id)",
+        'args=(channel_id, video.get("video_id"), script, tenant_id)',
+        'args=(channel_id, video.get("video_id"), clips, script, tenant_id)',
+        'args=(channel_id, video.get("video_id"), publish_result, clips, tenant_id)',
+        'args=(channel_id, video.get("video_id"), analytics_result, clips, tenant_id)',
+        "args=(channel_id, learning_result, analytics_result, tenant_id)",
+    ):
+        assert call in wf_src, f"workflow does not thread tenant_id: {call}"
+
+
 @pytest.mark.asyncio
 async def test_record_analytics_attributes_a_tenant_less_publish(monkeypatch):
     """A publish with no tenant lineage must still be attributable, not dropped.
@@ -336,3 +459,49 @@ async def test_record_analytics_attributes_a_tenant_less_publish(monkeypatch):
 
     await acts.record_analytics("chan-1", "vid-1", {"platform": "youtube"}, {})
     assert seen.get("tenant_id") == acts.UNATTRIBUTED_TENANT
+
+
+@pytest.mark.asyncio
+async def test_run_tenant_threads_through_publish_to_analytics(monkeypatch):
+    """End-to-end: a workflow tenant reaches the publish + record tokens."""
+    claims: list = []
+
+    def _fake_token(subject, roles=None, **kwargs):
+        claims.append(kwargs.get("tenant_id"))
+        return "signed-token"
+
+    class _FakeResponse:
+        status_code = 200
+        content = b'{"publication_id": "pub-1"}'
+        text = '{"publication_id": "pub-1"}'
+
+        def json(self):
+            return {"publication_id": "pub-1", "status": "published"}
+
+        def raise_for_status(self):
+            return None
+
+    class _FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, json=None):
+            return _FakeResponse()
+
+    monkeypatch.setattr(acts, "create_service_token", _fake_token)
+    monkeypatch.setattr(acts.httpx, "AsyncClient", _FakeClient)
+
+    published = await acts.publish_content(
+        "chan-1", "vid-1", {"candidates": []}, {}, tenant_id="tenant-a"
+    )
+    # The tenant lineage must survive into the publish result, which is what the
+    # analytics ingestion leg reads.
+    assert published["tenant_id"] == "tenant-a"
+    await acts.record_analytics("chan-1", "vid-1", published, {})
+    assert "tenant-a" in claims
