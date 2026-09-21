@@ -32,7 +32,17 @@ class PublicationTracker:
     Durability of the metrics themselves lives in the warehouse; this holds only
     the routing state that tells the fetch loop which videos to measure, so it is
     explicitly bounded rather than allowed to grow without limit.
+
+    Routing is keyed by ``(tenant_id, channel_id)``, not by channel alone. A
+    channel id is not a globally unique key across tenants, so keying on it
+    would let one tenant's ``publication.published`` event cause the fetch loop
+    to measure a different tenant's videos that happen to share a channel id.
     """
+
+    #: Tenant recorded for an event that carried no tenant claim. The publisher
+    #: falls back to this same value, so the two agree rather than dropping the
+    #: event on the floor.
+    UNATTRIBUTED_TENANT = "system"
 
     def __init__(self, max_entries: int = 5000) -> None:
         self._max_entries = max_entries
@@ -43,7 +53,7 @@ class PublicationTracker:
         record = {
             "publication_id": event.get("publication_id"),
             "channel_id": event.get("channel_id"),
-            "tenant_id": event.get("tenant_id"),
+            "tenant_id": event.get("tenant_id") or self.UNATTRIBUTED_TENANT,
             "platform": event.get("platform"),
             "platform_video_id": event.get("platform_video_id"),
             "published_url": event.get("published_url"),
@@ -53,6 +63,7 @@ class PublicationTracker:
             "recorded_at": datetime.now(timezone.utc).isoformat(),
         }
         key = str(record["publication_id"] or record["platform_video_id"] or len(self._publications))
+        key = f"{record['tenant_id']}:{key}"
         self._publications[key] = record
         overflow = len(self._publications) - self._max_entries
         if overflow > 0:
@@ -60,13 +71,33 @@ class PublicationTracker:
                 self._publications.pop(stale, None)
         return record
 
-    def videos_for_channel(self, channel_id: str) -> list[str]:
-        """Platform video ids observed for a channel (used by the fetch loop)."""
+    def videos_for_channel(self, channel_id: str, tenant_id: str) -> list[str]:
+        """Platform video ids observed for a channel *within one tenant*.
+
+        ``tenant_id`` is required rather than optional: a tenant-less lookup
+        would silently become a cross-tenant read, which is the defect this
+        scoping exists to prevent.
+        """
         return [
             str(record["platform_video_id"])
             for record in self._publications.values()
-            if record.get("channel_id") == channel_id and record.get("platform_video_id")
+            if record.get("channel_id") == channel_id
+            and record.get("tenant_id") == tenant_id
+            and record.get("platform_video_id")
         ]
+
+    def targets(self) -> list[tuple[str, str]]:
+        """Distinct ``(tenant_id, channel_id)`` pairs that own published content."""
+        seen: list[tuple[str, str]] = []
+        for record in self._publications.values():
+            tenant_id = record.get("tenant_id") or self.UNATTRIBUTED_TENANT
+            channel_id = record.get("channel_id")
+            if not channel_id:
+                continue
+            pair = (tenant_id, str(channel_id))
+            if pair not in seen:
+                seen.append(pair)
+        return seen
 
     def all_records(self) -> list[dict[str, Any]]:
         return list(self._publications.values())
