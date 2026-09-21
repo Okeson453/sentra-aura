@@ -63,6 +63,12 @@ class Settings(BaseSettings):
     jwt_expiry_minutes: int = Field(default=60, alias="JWT_EXPIRY_MINUTES")
     api_key_header: str = Field(default="X-API-Key", alias="API_KEY_HEADER")
     allowed_tenants: list[str] = Field(default_factory=list, alias="ALLOWED_TENANTS")
+    #: When True the acting tenant is taken solely from the verified JWT claim
+    #: and a request that names a different tenant is rejected.  Defaults to the
+    #: production posture (fail closed).
+    enforce_tenant_isolation: bool = Field(
+        default=True, alias="ENFORCE_TENANT_ISOLATION"
+    )
 
     # Observability
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
