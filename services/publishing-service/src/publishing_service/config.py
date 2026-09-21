@@ -32,6 +32,13 @@ class ServiceConfig(BaseSettings):
     database_url: str = Field(default="sqlite:///./publishing_service.db", description="Database connection URL")
     redis_url: str | None = Field(default=None, description="Redis connection URL")
     jwt_secret: str = Field(default="change-me-in-production", description="JWT signing secret")
+    enforce_tenant_isolation: bool = Field(
+        default=True,
+        description=(
+            "When True (production posture) the tenant in the verified JWT claim "
+            "is authoritative and a contradicting request is rejected with 403"
+        ),
+    )
     api_key_header: str = Field(default="X-API-Key", description="API key header name")
     max_request_size_mb: int = Field(default=50, ge=1, le=500, description="Max request size in MB")
     request_timeout_seconds: float = Field(default=30.0, ge=5.0, le=300.0, description="Request timeout")
