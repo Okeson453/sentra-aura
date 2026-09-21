@@ -8,6 +8,7 @@ from service_kit.metrics import MetricsCollector, get_metrics_collector
 from service_kit.middleware import (
     MetricsMiddleware,
     RequestIDMiddleware,
+    TenantContextMiddleware,
     TenantResolutionMiddleware,
     AuthenticationMiddleware,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "get_metrics_collector",
     "MetricsMiddleware",
     "RequestIDMiddleware",
+    "TenantContextMiddleware",
     "TenantResolutionMiddleware",
     "AuthenticationMiddleware",
     "create_lifespan",

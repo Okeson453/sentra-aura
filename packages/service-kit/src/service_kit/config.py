@@ -48,6 +48,17 @@ class ServiceConfig(BaseSettings):
     # CORS
     cors_origins: list[str] = Field(default=["*"])
 
+    # Authentication.  ``require_auth`` defaults to True so that a service
+    # cannot become fail-open by omitting the argument: the posture is a
+    # visible configuration decision, not a silent default.  A deployment that
+    # intends an open surface opts out explicitly (REQUIRE_AUTH=false).
+    require_auth: bool = Field(default=True)
+    jwt_secret: str | None = Field(default=None)
+
+    # Tenant isolation.  When enabled, the authentication middleware arms the
+    # ORM row-level-security hook per request from the verified tenant claim.
+    enforce_tenant_isolation: bool = Field(default=True)
+
 
 # Alias for backward compatibility
 Settings = ServiceConfig
