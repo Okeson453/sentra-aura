@@ -32,7 +32,7 @@ EXPECTED_ROUTES = {
     "generate_visuals": ("provider-gateway", "/v1/images/generate"),
     "render_video": ("media-renderer", "/render"),
     "generate_clips": ("clipping-engine", "/clips/detect"),
-    "record_analytics": ("analytics-ingestion", "/api/v1/tasks/status"),
+    "record_analytics": ("analytics-ingestion", "/api/v1/analytics/record"),
     "update_learning": ("analytics-ingestion", "/api/v1/signals"),
     "optimize_policy": ("policy-engine", "/api/v1/evaluate"),
 }
@@ -47,7 +47,7 @@ FAILURE_CASES = {
     "generate_clips": lambda: acts.generate_clips("c", "v", {}),
     "publish_content": lambda: acts.publish_content("c", "v", {}, {}),
     "record_analytics": lambda: acts.record_analytics("c", "v", {}, {}),
-    "update_learning": lambda: acts.update_learning("c", "v", {}, {}),
+    "update_learning": lambda: acts.update_learning("c", "v", {"normalized_metrics": [{"video_id": "v"}]}, {}),
     "optimize_policy": lambda: acts.optimize_policy("c", {}, {}),
 }
 
@@ -175,3 +175,164 @@ def test_workflow_fails_loudly_on_activity_error():
     wf_src = Path(acts.__file__).parent.joinpath("workflows.py").read_text()
     assert "maximum_attempts=max(1, task.max_retries + 1)" in wf_src
     assert "if task.retries >= task.max_retries:" not in wf_src
+
+
+def test_record_analytics_targets_a_real_post_route():
+    """The measurement leg must post to a route analytics-ingestion really serves.
+
+    Regression: it posted to ``/api/v1/tasks/status``, which that service exposes
+    as a GET-only route, so every call returned 405 and the feedback loop's
+    measurement step recorded nothing while the activity reported success.
+    """
+    src = _activities_source()
+    assert re.search(r'"analytics-ingestion"\s*,\s*"/api/v1/analytics/record"', src), (
+        "record_analytics must post to /api/v1/analytics/record"
+    )
+    # Only the request-target string matters; a comment that mentions the old
+    # route while explaining the defect is not a regression.
+    assert '"analytics-ingestion",\n        "/api/v1/tasks/status"' not in src, (
+        "record_analytics must not target the GET-only /api/v1/tasks/status"
+    )
+
+    analytics_src_dir = (
+        Path(acts.__file__).parents[3]
+        / "analytics-ingestion"
+        / "src"
+        / "analytics_ingestion"
+    )
+    if not analytics_src_dir.exists():
+        pytest.skip("analytics-ingestion source not present in this checkout")
+    # The route may live in any module of the package (main composes routers).
+    analytics_src = "\n".join(
+        p.read_text() for p in sorted(analytics_src_dir.glob("*.py"))
+    )
+    assert '@router.post("/api/v1/analytics/record")' in analytics_src or (
+        '@app.post("/api/v1/analytics/record")' in analytics_src
+    ), "analytics-ingestion must expose a POST /api/v1/analytics/record route"
+    assert "@router.post(\"/api/v1/tasks/status\")" not in analytics_src
+    assert "@app.post(\"/api/v1/tasks/status\")" not in analytics_src
+
+
+@pytest.mark.asyncio
+async def test_update_learning_refuses_without_measured_metrics():
+    """The learning leg must not proceed on a payload the service would reject.
+
+    Regression: it forwarded the recording acknowledgement (not a
+    NormalizedMetrics row), so /api/v1/signals returned 400 and no signal was
+    ever produced. Absent measurements must be a loud, explicit precondition
+    failure rather than a fabricated metric or a silent success.
+    """
+    with pytest.raises(ValueError, match="normalized_metrics"):
+        await acts.update_learning("c", "v", {"event_id": "e"}, {})
+
+
+@pytest.mark.asyncio
+async def test_call_or_raise_forwards_tenant_to_the_service_call(monkeypatch):
+    """Tenant lineage must reach ``_call_service`` as a signed claim.
+
+    Regression: it travelled as a plain kwarg into ``**extra``, so it was echoed
+    into the activity result and never reached the token — leaving every
+    tenant-authorized downstream service to reject the call once auth became
+    fail-closed.
+    """
+    seen: dict = {}
+
+    async def _fake_call(service_name, endpoint, payload, tenant_id=None):
+        seen["tenant_id"] = tenant_id
+        seen["endpoint"] = endpoint
+        return {"ok": True}
+
+    monkeypatch.setattr(acts, "_call_service", _fake_call)
+    await acts._call_service_or_raise(
+        "analytics-ingestion", "/api/v1/signals", {}, activity_name="t", tenant_id="tenant-a"
+    )
+    assert seen["tenant_id"] == "tenant-a"
+
+
+@pytest.mark.asyncio
+async def test_record_analytics_sends_a_tenant_claim(monkeypatch):
+    """The measurement call must be tenant-attributable, not anonymous."""
+    seen: dict = {}
+
+    def _fake_token(subject, roles=None, **kwargs):
+        seen.update(kwargs)
+        return "signed-token"
+
+    class _FakeResponse:
+        status_code = 200
+        content = b'{"event_id": "e1"}'
+        text = '{"event_id": "e1"}'
+
+        def json(self):
+            return {"event_id": "e1", "measurement_status": "recorded"}
+
+        def raise_for_status(self):
+            return None
+
+    class _FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, json=None):
+            seen["url"] = url
+            return _FakeResponse()
+
+    monkeypatch.setattr(acts, "create_service_token", _fake_token)
+    monkeypatch.setattr(acts.httpx, "AsyncClient", _FakeClient)
+
+    result = await acts.record_analytics(
+        "chan-1", "vid-1", {"tenant_id": "tenant-a", "platform": "youtube"}, {}
+    )
+    assert seen.get("tenant_id") == "tenant-a"
+    assert seen.get("url", "").endswith("/api/v1/analytics/record")
+    assert result["measurement_status"] == "recorded"
+
+
+@pytest.mark.asyncio
+async def test_record_analytics_attributes_a_tenant_less_publish(monkeypatch):
+    """A publish with no tenant lineage must still be attributable, not dropped.
+
+    The fallback is the same value analytics-ingestion uses, so the two agree
+    rather than the downstream call being rejected for a missing claim.
+    """
+    seen: dict = {}
+
+    def _fake_token(subject, roles=None, **kwargs):
+        seen.update(kwargs)
+        return "signed-token"
+
+    class _FakeResponse:
+        status_code = 200
+        content = b'{"event_id": "e2"}'
+        text = '{"event_id": "e2"}'
+
+        def json(self):
+            return {"event_id": "e2", "measurement_status": "unconfirmed"}
+
+        def raise_for_status(self):
+            return None
+
+    class _FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return False
+
+        async def post(self, url, json=None):
+            return _FakeResponse()
+
+    monkeypatch.setattr(acts, "create_service_token", _fake_token)
+    monkeypatch.setattr(acts.httpx, "AsyncClient", _FakeClient)
+
+    await acts.record_analytics("chan-1", "vid-1", {"platform": "youtube"}, {})
+    assert seen.get("tenant_id") == acts.UNATTRIBUTED_TENANT
