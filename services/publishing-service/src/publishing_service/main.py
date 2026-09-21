@@ -15,8 +15,19 @@ from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
+from sentinel_exceptions import AuthorizationError
 from sentinel_security.auth import AuthContext, authenticate_request
-from sqlalchemy import JSON, Column, DateTime, String, Text, create_engine, text
+from sentinel_security.tenant import auth_error_to_http_status, resolve_tenant_id
+from sqlalchemy import (
+    JSON,
+    Column,
+    DateTime,
+    String,
+    Text,
+    create_engine,
+    inspect,
+    text,
+)
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 from sqlalchemy.pool import QueuePool
 
@@ -34,6 +45,11 @@ Base = declarative_base()
 class Publication(Base):
     __tablename__ = "publications"
     publication_id = Column(String(36), primary_key=True)
+    #: Owning tenant. This is a security boundary rather than metadata: every
+    #: read, mutation and publish is filtered by it (see _require_tenant).
+    #: Nullable only so a pre-isolation schema can be upgraded additively --
+    #: such legacy rows match no tenant filter and therefore fail closed.
+    tenant_id = Column(String(32), index=True)
     channel_id = Column(String(255))
     title = Column(Text)
     description = Column(Text)
@@ -71,11 +87,39 @@ def get_db():
         db.close()
 
 
+def _ensure_tenant_column() -> None:
+    """Add the ``tenant_id`` column to a pre-existing ``publications`` table.
+
+    The schema is created with ``Base.metadata.create_all`` and this service has
+    no applied Alembic revision, so a database created before tenant scoping
+    keeps its old column set. Without this guard the new isolation filter would
+    reference a column that does not exist and every request would fail. The
+    ALTER is additive and nullable, so it is safe to run on every start; rows
+    created before isolation keep a NULL tenant, match no tenant filter, and are
+    therefore unreachable rather than exposed.
+    """
+    inspector = inspect(_engine)
+    if "publications" not in inspector.get_table_names():
+        return
+    existing = {column["name"] for column in inspector.get_columns("publications")}
+    if "tenant_id" in existing:
+        return
+    with _engine.begin() as connection:
+        connection.execute(
+            text("ALTER TABLE publications ADD COLUMN tenant_id VARCHAR(32)")
+        )
+    logger.warning(
+        "publications table predates tenant isolation; added a nullable "
+        "tenant_id column (legacy rows match no tenant and are not exposed)"
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global config
     config = ServiceConfig()
     logging.basicConfig(level=getattr(logging, config.log_level.upper(), logging.INFO))
+    _ensure_tenant_column()
     logger.info("Publishing Service started: %s v%s", config.service_name, config.version)
     yield
     logger.info("Publishing Service shutting down")
@@ -91,6 +135,32 @@ def _verify_bearer(authorization: str | None = Header(None)) -> AuthContext:
         return authenticate_request(token, jwt_secret=config.jwt_secret)
     except Exception as e:
         raise HTTPException(status_code=401, detail=f"Authentication failed: {e}") from e
+
+
+def _require_tenant(
+    auth_context: AuthContext, requested_tenant_id: str | None = None
+) -> str:
+    """Resolve the tenant this request is authorised to act on.
+
+    SECURITY: the tenant is derived from the *verified* JWT claim carried in the
+    Authorization header. It is never read from a client-supplied header, query
+    parameter or body; ``requested_tenant_id`` is treated purely as an assertion
+    to verify. Before this check the publications API was filtered by
+    ``publication_id`` alone, so any authenticated principal could read, rename,
+    archive and publish another tenant's publications -- broken object-level
+    authorization. Missing tenant identity is a 401; a mismatched tenant is a
+    403.
+    """
+    try:
+        return resolve_tenant_id(
+            auth_context,
+            requested_tenant_id,
+            enforce_isolation=config.enforce_tenant_isolation,
+        )
+    except AuthorizationError as exc:
+        raise HTTPException(
+            status_code=auth_error_to_http_status(exc), detail=str(exc)
+        ) from exc
 
 
 
@@ -140,8 +210,15 @@ async def readiness_check(db: Session = Depends(get_db)) -> dict[str, Any]:
 
 @app.post("/publications")
 async def create_publication(request: Request, authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Create a publication."""
+    """Create a publication.
+
+    The owning tenant is taken from the authenticated token. A ``tenant_id`` in
+    the body is an assertion to verify, never the source of truth -- previously
+    it was accepted (and silently dropped), so a caller could attempt to claim
+    ownership belonging to another tenant.
+    """
     body = await request.json()
+    tenant = _require_tenant(authorization, body.get("tenant_id"))
     publication_id = f"pub-{uuid.uuid4().hex[:12]}"
 
     scheduled_at = body.get("scheduled_at")
@@ -153,6 +230,7 @@ async def create_publication(request: Request, authorization: str = Depends(_ver
 
     pub = Publication(
         publication_id=publication_id,
+        tenant_id=tenant,
         channel_id=body.get("channel_id", ""),
         title=body.get("title", ""),
         description=body.get("description", ""),
@@ -189,8 +267,12 @@ async def create_publication(request: Request, authorization: str = Depends(_ver
 
 @app.get("/publications")
 async def list_publications(authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
-    """List publications."""
-    publications = db.query(Publication).all()
+    """List publications owned by the authenticated tenant."""
+    publications = (
+        db.query(Publication)
+        .filter(Publication.tenant_id == _require_tenant(authorization))
+        .all()
+    )
     return {
         "publications": [
             {
@@ -208,8 +290,20 @@ async def list_publications(authorization: str = Depends(_verify_bearer), db: Se
 
 @app.get("/publications/{publication_id}")
 async def get_publication(publication_id: str, authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Get publication by ID."""
-    pub = db.query(Publication).filter(Publication.publication_id == publication_id).first()
+    """Get a publication by ID, scoped to the authenticated tenant.
+
+    A cross-tenant id is indistinguishable from a missing one (404), so the
+    endpoint cannot be used to probe for other tenants' publication ids.
+    """
+    tenant = _require_tenant(authorization)
+    pub = (
+        db.query(Publication)
+        .filter(
+            Publication.publication_id == publication_id,
+            Publication.tenant_id == tenant,
+        )
+        .first()
+    )
     if not pub:
         raise HTTPException(status_code=404, detail="publication_id not found")
 
@@ -232,9 +326,17 @@ async def get_publication(publication_id: str, authorization: str = Depends(_ver
 
 @app.put("/publications/{publication_id}")
 async def update_publication(publication_id: str, request: Request, authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Update publication."""
+    """Update a publication, scoped to the authenticated tenant."""
     body = await request.json()
-    pub = db.query(Publication).filter(Publication.publication_id == publication_id).first()
+    tenant = _require_tenant(authorization, body.get("tenant_id"))
+    pub = (
+        db.query(Publication)
+        .filter(
+            Publication.publication_id == publication_id,
+            Publication.tenant_id == tenant,
+        )
+        .first()
+    )
     if not pub:
         raise HTTPException(status_code=404, detail="publication_id not found")
 
@@ -274,8 +376,15 @@ async def update_publication(publication_id: str, request: Request, authorizatio
 
 @app.delete("/publications/{publication_id}")
 async def delete_publication(publication_id: str, authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> None:
-    """Delete/archive publication."""
-    pub = db.query(Publication).filter(Publication.publication_id == publication_id).first()
+    """Delete/archive a publication, scoped to the authenticated tenant."""
+    pub = (
+        db.query(Publication)
+        .filter(
+            Publication.publication_id == publication_id,
+            Publication.tenant_id == _require_tenant(authorization),
+        )
+        .first()
+    )
     if not pub:
         raise HTTPException(status_code=404, detail="publication_id not found")
     pub.status = "archived"
@@ -285,8 +394,19 @@ async def delete_publication(publication_id: str, authorization: str = Depends(_
 
 @app.post("/publications/{publication_id}/publish")
 async def publish_now(publication_id: str, request: Request, authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Publish immediately to configured platforms."""
-    pub = db.query(Publication).filter(Publication.publication_id == publication_id).first()
+    """Publish immediately, for a publication owned by the authenticated tenant.
+
+    Without the tenant filter any principal could trigger publication of another
+    tenant's content to its connected platforms.
+    """
+    pub = (
+        db.query(Publication)
+        .filter(
+            Publication.publication_id == publication_id,
+            Publication.tenant_id == _require_tenant(authorization),
+        )
+        .first()
+    )
     if not pub:
         raise HTTPException(status_code=404, detail="Publication not found")
 
@@ -330,7 +450,14 @@ async def _process_publish_job(job_id: str, publication_id: str) -> None:
         if not publish_job:
             return
 
-        pub = db.query(Publication).filter(Publication.publication_id == publication_id).first()
+        # The job runs after the request has been authorised and the publish job
+        # row created, so it re-reads by id only; the tenant was already
+        # enforced at the API boundary (see publish_now).
+        pub = (
+            db.query(Publication)
+            .filter(Publication.publication_id == publication_id)
+            .first()
+        )
         if pub is None:
             publish_job.status = "failed"
             publish_job.error_message = f"Publication {publication_id} not found"
@@ -459,9 +586,16 @@ te that we have the necessary configuration.
 
 @app.post("/publications/{publication_id}/schedule")
 async def schedule_publication(publication_id: str, request: Request, authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Schedule publication."""
+    """Schedule a publication, scoped to the authenticated tenant."""
     body = await request.json()
-    pub = db.query(Publication).filter(Publication.publication_id == publication_id).first()
+    pub = (
+        db.query(Publication)
+        .filter(
+            Publication.publication_id == publication_id,
+            Publication.tenant_id == _require_tenant(authorization),
+        )
+        .first()
+    )
     if not pub:
         raise HTTPException(status_code=404, detail="Publication not found")
 
@@ -484,8 +618,15 @@ async def schedule_publication(publication_id: str, request: Request, authorizat
 
 @app.post("/publications/{publication_id}/unpublish")
 async def unpublish(publication_id: str, authorization: str = Depends(_verify_bearer), db: Session = Depends(get_db)) -> dict[str, Any]:
-    """Unpublish from platforms."""
-    pub = db.query(Publication).filter(Publication.publication_id == publication_id).first()
+    """Unpublish from platforms, scoped to the authenticated tenant."""
+    pub = (
+        db.query(Publication)
+        .filter(
+            Publication.publication_id == publication_id,
+            Publication.tenant_id == _require_tenant(authorization),
+        )
+        .first()
+    )
     if not pub:
         raise HTTPException(status_code=404, detail="Publication not found")
     pub.status = "archived"
