@@ -4,9 +4,22 @@ from __future__ import annotations
 from datetime import datetime
 
 from fastapi.testclient import TestClient
+from sentinel_security import create_service_token
 
 from analytics_ingestion import main
+from analytics_ingestion import runtime
+from analytics_ingestion.config import config as analytics_config
 from analytics_ingestion.youtube_analytics_client import VideoMetrics
+
+
+def _headers(tenant_id: str = "tenant-aaa") -> dict[str, str]:
+    token = create_service_token(
+        "analytics-ingestion",
+        ["service"],
+        secret=analytics_config.jwt_secret,
+        tenant_id=tenant_id,
+    )
+    return {"Authorization": f"Bearer {token}"}
 
 
 class FailingWriter:
@@ -42,13 +55,14 @@ class FakeYouTubeClient:
 
 def test_ingest_write_failure_does_not_report_success(monkeypatch) -> None:
     fake_writer = FailingWriter()
-    monkeypatch.setattr(main, "writer", fake_writer)
-    monkeypatch.setattr(main, "yt_client", FakeYouTubeClient())
+    monkeypatch.setattr(runtime, "writer", fake_writer)
+    monkeypatch.setattr(runtime, "yt_client", FakeYouTubeClient())
 
     response = TestClient(main.app).post(
         "/api/v1/ingest/youtube",
         params={"channel_id": "channel-1"},
         json=["video-1"],
+        headers=_headers(),
     )
 
     assert response.status_code == 502
