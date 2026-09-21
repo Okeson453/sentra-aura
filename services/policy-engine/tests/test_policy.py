@@ -40,7 +40,23 @@ def test_policy_rule_block():
 def test_policy_store():
     store = PolicyStore()
     rule = PolicyRule(rule_id="R1", name="Test Rule", rule_type=RuleType.EXACT, autonomy_level=AutonomyLevel.L2)
-    store.add("C1", rule)
-    assert len(store.get("C1")) == 1
-    store.clear("C1")
-    assert len(store.get("C1")) == 0
+    store.add("tenant-a", "C1", rule)
+    assert len(store.get("tenant-a", "C1")) == 1
+    store.clear("tenant-a", "C1")
+    assert len(store.get("tenant-a", "C1")) == 0
+
+
+def test_policy_store_partitions_by_tenant():
+    """A channel id does not leak rules across tenants.
+
+    Before this was enforced the store keyed only on channel_id, so any caller
+    naming another tenant's channel received that tenant's rules.
+    """
+    store = PolicyStore()
+    rule = PolicyRule(rule_id="R1", name="secret", rule_type=RuleType.EXACT)
+    store.add("tenant-a", "shared-channel-id", rule)
+
+    assert len(store.get("tenant-a", "shared-channel-id")) == 1
+    assert store.get("tenant-b", "shared-channel-id") == []
+    assert store.list_for_tenant("tenant-b") == {}
+    assert list(store.list_for_tenant("tenant-a")) == ["shared-channel-id"]
