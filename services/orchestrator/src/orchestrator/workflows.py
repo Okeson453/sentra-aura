@@ -67,7 +67,12 @@ class AgentWorkflow:
                 task.state = TaskState.STARTED
                 result = await workflow.execute_activity(
                     "execute_agent_task",
-                    args=(task.task_type, task.agent_type, task.inputs),
+                    args=(
+                        task.task_type,
+                        task.agent_type,
+                        task.inputs,
+                        getattr(execution, "tenant_id", None),
+                    ),
                     start_to_close_timeout=timedelta(minutes=10),
                     retry_policy=RetryPolicy(
                         maximum_attempts=max(1, task.max_retries + 1),
@@ -106,17 +111,26 @@ class LongFormVideoWorkflow:
     async def run(self, params: dict[str, Any]) -> dict[str, Any]:
         channel_id = params["channel_id"]
         topic = params["topic"]
+        #: Owning tenant for this run. Threaded into every activity so the
+        #: signed service token carries it as a claim: downstream services
+        #: (publishing-service, policy-engine, analytics-ingestion) derive the
+        #: acting tenant from that verified claim and fail closed (401) on a
+        #: tenant-less token, so a run without it cannot publish or re-evaluate
+        #: policy at all. Absent lineage falls back to the shared unattributed
+        #: tenant rather than being silently dropped.
+        tenant_id = params.get("tenant_id")
         workflow_id = params.get("workflow_id", workflow.uuid4() if hasattr(workflow, "uuid4") else str(workflow.info().workflow_id))
 
         results: dict[str, Any] = {
             "channel_id": channel_id,
             "topic": topic,
+            "tenant_id": tenant_id,
             "workflow_id": workflow_id,
         }
 
         research = await workflow.execute_activity(
             "research_topic",
-            args=(channel_id, topic),
+            args=(channel_id, topic, tenant_id),
             start_to_close_timeout=timedelta(minutes=15),
             retry_policy=RetryPolicy(maximum_attempts=3),
         )
@@ -124,7 +138,7 @@ class LongFormVideoWorkflow:
 
         script = await workflow.execute_activity(
             "draft_script",
-            args=(channel_id, research),
+            args=(channel_id, research, tenant_id),
             start_to_close_timeout=timedelta(minutes=15),
             retry_policy=RetryPolicy(maximum_attempts=3),
         )
@@ -132,7 +146,7 @@ class LongFormVideoWorkflow:
 
         voice = await workflow.execute_activity(
             "produce_voice",
-            args=(channel_id, script),
+            args=(channel_id, script, tenant_id),
             start_to_close_timeout=timedelta(minutes=20),
             retry_policy=RetryPolicy(maximum_attempts=3),
         )
@@ -140,7 +154,7 @@ class LongFormVideoWorkflow:
 
         visuals = await workflow.execute_activity(
             "generate_visuals",
-            args=(channel_id, script),
+            args=(channel_id, script, tenant_id),
             start_to_close_timeout=timedelta(minutes=30),
             retry_policy=RetryPolicy(maximum_attempts=3),
         )
@@ -148,7 +162,7 @@ class LongFormVideoWorkflow:
 
         video = await workflow.execute_activity(
             "render_video",
-            args=(channel_id, script, voice, visuals),
+            args=(channel_id, script, voice, visuals, tenant_id),
             start_to_close_timeout=timedelta(minutes=30),
             retry_policy=RetryPolicy(maximum_attempts=2),
         )
@@ -156,7 +170,7 @@ class LongFormVideoWorkflow:
 
         clips = await workflow.execute_activity(
             "generate_clips",
-            args=(channel_id, video.get("video_id"), script),
+            args=(channel_id, video.get("video_id"), script, tenant_id),
             start_to_close_timeout=timedelta(minutes=45),
             retry_policy=RetryPolicy(maximum_attempts=2),
         )
@@ -164,7 +178,7 @@ class LongFormVideoWorkflow:
 
         publish_result = await workflow.execute_activity(
             "publish_content",
-            args=(channel_id, video.get("video_id"), clips, script),
+            args=(channel_id, video.get("video_id"), clips, script, tenant_id),
             start_to_close_timeout=timedelta(minutes=30),
             retry_policy=RetryPolicy(maximum_attempts=2),
         )
@@ -173,7 +187,7 @@ class LongFormVideoWorkflow:
 
         analytics_result = await workflow.execute_activity(
             "record_analytics",
-            args=(channel_id, video.get("video_id"), publish_result, clips),
+            args=(channel_id, video.get("video_id"), publish_result, clips, tenant_id),
             start_to_close_timeout=timedelta(minutes=10),
             retry_policy=RetryPolicy(maximum_attempts=2),
         )
@@ -181,7 +195,7 @@ class LongFormVideoWorkflow:
 
         learning_result = await workflow.execute_activity(
             "update_learning",
-            args=(channel_id, video.get("video_id"), analytics_result, clips),
+            args=(channel_id, video.get("video_id"), analytics_result, clips, tenant_id),
             start_to_close_timeout=timedelta(minutes=15),
             retry_policy=RetryPolicy(maximum_attempts=2),
         )
@@ -189,7 +203,7 @@ class LongFormVideoWorkflow:
 
         optimize_result = await workflow.execute_activity(
             "optimize_policy",
-            args=(channel_id, learning_result, analytics_result),
+            args=(channel_id, learning_result, analytics_result, tenant_id),
             start_to_close_timeout=timedelta(minutes=10),
             retry_policy=RetryPolicy(maximum_attempts=2),
         )
