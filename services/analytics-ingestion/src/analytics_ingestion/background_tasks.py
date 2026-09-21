@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from analytics_ingestion.config import config
+from analytics_ingestion.consumers import tracker
 from analytics_ingestion.youtube_analytics_client import YouTubeAnalyticsClient
 from analytics_ingestion.warehouse_writer import WarehouseWriter
 
@@ -88,8 +89,9 @@ class BackgroundTaskScheduler:
         """Fetch video metrics for configured channels every N seconds."""
         while self._running:
             try:
-                if self.channel_ids:
-                    logger.info("Starting periodic video metrics fetch for %d channels", len(self.channel_ids))
+                channels = self._effective_channel_ids()
+                if channels:
+                    logger.info("Starting periodic video metrics fetch for %d channels", len(channels))
                     await self._fetch_all_channels()
                 else:
                     logger.debug("No channel IDs configured; skipping video metrics fetch")
@@ -100,10 +102,34 @@ class BackgroundTaskScheduler:
                 logger.error("Video metrics fetch failed: %s", exc, exc_info=True)
                 await asyncio.sleep(60)
 
+    def _effective_channel_ids(self) -> list[str]:
+        """Configured channels plus any channel that published content.
+
+        A ``publication.published`` event is what makes a channel worth
+        measuring: without merging them in, newly published videos would never
+        be fetched unless an operator also listed the channel in config.
+        """
+        channels = list(self.channel_ids)
+        for record in tracker.all_records():
+            channel_id = record.get("channel_id")
+            if channel_id and channel_id not in channels:
+                channels.append(channel_id)
+        return channels
+
     async def _fetch_all_channels(self) -> None:
-        """Fetch metrics for all configured channels."""
-        for channel_id in self.channel_ids:
+        """Fetch metrics for configured channels and for published content."""
+        for channel_id in self._effective_channel_ids():
             try:
+                video_ids = tracker.videos_for_channel(channel_id)
+                if video_ids:
+                    video_metrics = await self.youtube_client.fetch_video_metrics(video_ids, channel_id)
+                    for metrics in video_metrics:
+                        await self.warehouse_writer.write_metrics(metrics)
+                    logger.info(
+                        "Fetched metrics for %d published video(s) on %s",
+                        len(video_metrics),
+                        channel_id,
+                    )
                 channel_metrics = await self.youtube_client.fetch_channel_metrics(channel_id)
                 await self.warehouse_writer.write_metrics(channel_metrics)
                 self._last_fetch_results[channel_id] = {

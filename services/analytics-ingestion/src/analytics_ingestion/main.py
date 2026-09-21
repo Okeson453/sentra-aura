@@ -9,7 +9,14 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 
+from analytics_ingestion.background_tasks import BackgroundTaskScheduler
 from analytics_ingestion.config import config
+from analytics_ingestion.consumers import (
+    DURABLE_NAME,
+    PUBLICATION_PUBLISHED_SUBJECT,
+    start_publication_consumer,
+    tracker,
+)
 from analytics_ingestion.normalization import NormalizedMetrics, normalize_metrics, compute_performance_signal
 from analytics_ingestion.warehouse_writer import WarehouseWriter
 from analytics_ingestion.youtube_analytics_client import YouTubeAnalyticsClient
@@ -21,13 +28,49 @@ writer = WarehouseWriter(
     flush_interval_seconds=config.flush_interval_seconds,
 )
 yt_client = YouTubeAnalyticsClient(api_key=config.youtube_api_key)
+scheduler = BackgroundTaskScheduler(
+    youtube_client=yt_client,
+    warehouse_writer=writer,
+    channel_ids=list(config.channel_ids),
+    fetch_interval_seconds=config.video_metrics_fetch_interval_seconds,
+    flush_interval_seconds=config.flush_interval_seconds,
+    health_check_interval_seconds=config.channel_health_check_interval_seconds,
+    max_videos_per_fetch=config.max_videos_per_channel_fetch,
+)
+
+# Runtime state for the feedback consumer. Reported verbatim by /api/v1/tasks/status
+# so a deployment can tell the difference between "consuming feedback" and
+# "the loop is silently open".
+_consumer_state: dict[str, Any] = {
+    "status": "stopped",
+    "subject": PUBLICATION_PUBLISHED_SUBJECT,
+    "durable": DURABLE_NAME,
+    "error": None,
+}
+_nats_client: Any = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _nats_client
     await writer.start()
+    if config.enable_background_ingestion:
+        await scheduler.start()
+    try:
+        _nats_client, _consumer = await start_publication_consumer()
+        _consumer_state.update(status="running", error=None)
+    except Exception as exc:  # never claim feedback we do not have
+        _consumer_state.update(status="failed", error=str(exc))
+        logger.error("analytics feedback consumer failed to start: %s", exc, exc_info=True)
     logger.info("Analytics Ingestion Service started")
     yield
+    if config.enable_background_ingestion:
+        await scheduler.stop()
+    if _nats_client is not None:
+        try:
+            await _nats_client.close()
+        except Exception as exc:
+            logger.warning("NATS client close failed: %s", exc)
     await writer.stop()
     await yt_client.close()
     logger.info("Analytics Ingestion Service stopped")
@@ -206,18 +249,56 @@ async def get_analytics_report(
 
 @app.get("/api/v1/tasks/status")
 async def get_background_task_status() -> dict[str, Any]:
-    """Get status of background ingestion tasks."""
+    """Get the real status of background ingestion and feedback tasks.
+
+    Previously this reported every task as ``scheduled`` regardless of runtime
+    state, and omitted the event consumer entirely — so an operator could not
+    distinguish a working loop from a completely open one. The status here is
+    read from the live objects.
+    """
+    scheduler_running = bool(getattr(scheduler, "_running", False))
+    task_status = "running" if scheduler_running else "stopped"
     return {
         "service": config.service_name,
         "tasks": {
-            "video_metrics_fetch": {"interval_seconds": 900, "status": "scheduled"},
-            "warehouse_flush": {"interval_seconds": 60, "status": "scheduled"},
-            "channel_health_check": {"interval_seconds": 300, "status": "scheduled"},
+            "video_metrics_fetch": {
+                "interval_seconds": scheduler.fetch_interval,
+                "status": task_status,
+            },
+            "warehouse_flush": {
+                "interval_seconds": scheduler.flush_interval,
+                "status": task_status,
+            },
+            "channel_health_check": {
+                "interval_seconds": scheduler.health_check_interval,
+                "status": task_status,
+            },
         },
+        "feedback_consumer": dict(_consumer_state),
+        "publications_tracked": len(tracker.all_records()),
+        "configured_channels": len(scheduler.channel_ids),
         "writer_status": {
             "batch_size": config.batch_size,
             "flush_interval_seconds": config.flush_interval_seconds,
         },
+    }
+
+
+@app.get("/api/v1/publications/ingested")
+async def get_ingested_publications(channel_id: str | None = None) -> dict[str, Any]:
+    """Expose the publications this service has consumed for metric ingestion.
+
+    This is the observable end of the feedback loop: a ``publication.published``
+    event on the bus must appear here, and its videos must be measured by the
+    periodic fetch.
+    """
+    records = tracker.all_records()
+    if channel_id:
+        records = [r for r in records if r.get("channel_id") == channel_id]
+    return {
+        "count": len(records),
+        "consumer": dict(_consumer_state),
+        "publications": records,
     }
 
 
