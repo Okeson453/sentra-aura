@@ -31,6 +31,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Session, declarative_base, sessionmaker
 from sqlalchemy.pool import QueuePool
 
+from publishing_service import policy_gate
 from publishing_service.config import ServiceConfig
 from publishing_service.feedback import publish_publication_published
 
@@ -72,6 +73,10 @@ class PublishJob(Base):
     started_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     completed_at = Column(DateTime)
     error_message = Column(Text)
+    #: The governance decision that authorised (or blocked) this job. Persisted
+    #: so a publication's policy provenance is auditable after the fact rather
+    #: than only existing in logs.
+    gate_decision = Column(JSON)
 
 # Initialize database
 _engine = create_engine(config.database_url, poolclass=QueuePool, pool_size=5, max_overflow=10)
@@ -97,21 +102,46 @@ def _ensure_tenant_column() -> None:
     ALTER is additive and nullable, so it is safe to run on every start; rows
     created before isolation keep a NULL tenant, match no tenant filter, and are
     therefore unreachable rather than exposed.
+
+    The same applies to ``publish_jobs.gate_decision``, added when the
+    governance gate was introduced: an existing database would otherwise be
+    missing the column the gate now writes.
     """
     inspector = inspect(_engine)
-    if "publications" not in inspector.get_table_names():
-        return
-    existing = {column["name"] for column in inspector.get_columns("publications")}
-    if "tenant_id" in existing:
-        return
-    with _engine.begin() as connection:
-        connection.execute(
-            text("ALTER TABLE publications ADD COLUMN tenant_id VARCHAR(32)")
-        )
-    logger.warning(
-        "publications table predates tenant isolation; added a nullable "
-        "tenant_id column (legacy rows match no tenant and are not exposed)"
-    )
+    tables = set(inspector.get_table_names())
+
+    if "publications" in tables:
+        existing = {column["name"] for column in inspector.get_columns("publications")}
+        if "tenant_id" not in existing:
+            with _engine.begin() as connection:
+                connection.execute(
+                    text("ALTER TABLE publications ADD COLUMN tenant_id VARCHAR(32)")
+                )
+            logger.warning(
+                "publications table predates tenant isolation; added a nullable "
+                "tenant_id column (legacy rows match no tenant and are not exposed)"
+            )
+
+    if "publish_jobs" in tables:
+        existing = {column["name"] for column in inspector.get_columns("publish_jobs")}
+        if "gate_decision" not in existing:
+            with _engine.begin() as connection:
+                connection.execute(
+                    text("ALTER TABLE publish_jobs ADD COLUMN gate_decision JSON")
+                )
+            logger.warning(
+                "publish_jobs table predates the governance gate; added a "
+                "nullable gate_decision column"
+            )
+
+
+# Run the schema repair at import time, not only in the ASGI lifespan. Any
+# process that imports this module (a Temporal worker, a management script, the
+# test suite) previously got an unrepaired schema: a pre-existing database kept
+# its old column set and the publish job would then fail when writing
+# ``gate_decision``. Repairing here makes the module self-consistent wherever it
+# is imported; the lifespan call remains for a database created after import.
+_ensure_tenant_column()
 
 
 @asynccontextmanager
@@ -468,6 +498,41 @@ async def _process_publish_job(job_id: str, publication_id: str) -> None:
         platform_results = []
         platforms = pub.platforms or ["youtube"]
 
+        # Governance gate (Architecture §9): no content may reach an external
+        # platform without a policy decision. Before this call existed the
+        # orchestrator evaluated policy *after* publish_content had already
+        # uploaded, so a restrictive, absent or failed policy had no effect on
+        # whether content went live. Fail closed: a denial, an unreachable
+        # policy-engine and a decision with no explicit approval all block the
+        # publish rather than being converted into a success.
+        try:
+            gate_decision = await policy_gate.require_publish_approval(
+                tenant_id=getattr(pub, "tenant_id", None) or "system",
+                channel_id=pub.channel_id,
+                publication_id=pub.publication_id,
+                enabled=config.policy_gate_enabled,
+                engine_url=config.policy_engine_url,
+            )
+        except Exception as gate_error:
+            publish_job.status = "failed"
+            publish_job.error_message = f"policy gate blocked publication: {gate_error}"
+            publish_job.platform_results = []
+            publish_job.completed_at = datetime.now(timezone.utc)
+            # A blocked publication is not published; there is no partial state
+            # in the API contract, so it terminates as failed.
+            pub.status = "failed"
+            pub.updated_at = datetime.now(timezone.utc)
+            db.commit()
+            logger.warning(
+                "publish blocked by governance gate: publication=%s reason=%s",
+                publication_id,
+                gate_error,
+            )
+            return
+
+        publish_job.gate_decision = gate_decision
+        db.commit()
+
         for platform_id in platforms:
             try:
                 result = await _publish_to_platform(platform_id, pub)
@@ -548,9 +613,8 @@ async def _process_publish_job(job_id: str, publication_id: str) -> None:
 async def _publish_to_platform(platform_id: str, pub: Publication) -> dict[str, Any]:
     """Publish to a specific platform.
 
-    In production, this calls the actual platform adapter.
-    For now, we valida
-te that we have the necessary configuration.
+    In production, this calls the actual platform adapter, validating that the
+    necessary configuration is present.
     """
     if platform_id == "youtube":
         from publishing_service.platforms.youtube import YouTubeAdapter
