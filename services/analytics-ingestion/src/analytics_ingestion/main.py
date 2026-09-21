@@ -1,8 +1,4 @@
-"""Analytics Ingestion Service — FastAPI application.
-
-Ingests, normalizes and persists YouTube performance data, and closes the
-feedback half of the operating loop by consuming ``publication.published``.
-"""
+"""FastAPI application for the Analytics Ingestion Service."""
 from __future__ import annotations
 
 import hmac
@@ -16,57 +12,71 @@ from fastapi.responses import JSONResponse
 
 from service_kit.middleware import setup_middleware
 
-from analytics_ingestion.background_tasks import scheduler
+from analytics_ingestion.background_tasks import BackgroundTaskScheduler
 from analytics_ingestion.config import config
-from analytics_ingestion.consumers import
-    PUBLICATION_PUBLISHED_SUBJECT,
+from analytics_ingestion.consumers import (
     DURABLE_NAME,
+    PUBLICATION_PUBLISHED_SUBJECT,
+    start_publication_consumer,
     tracker,
+)
+from analytics_ingestion.normalization import NormalizedMetrics, normalize_metrics, compute_performance_signal
+from analytics_ingestion.warehouse_writer import WarehouseWriter
+from analytics_ingestion.youtube_analytics_client import YouTubeAnalyticsClient
 
 logger = logging.getLogger(__name__)
+writer = WarehouseWriter(
+    warehouse_url=config.warehouse_url,
+    batch_size=config.batch_size,
+    flush_interval_seconds=config.flush_interval_seconds,
+)
+yt_client = YouTubeAnalyticsClient(api_key=config.youtube_api_key)
+scheduler = BackgroundTaskScheduler(
+    youtube_client=yt_client,
+    warehouse_writer=writer,
+    channel_ids=list(config.channel_ids),
+    fetch_interval_seconds=config.video_metrics_fetch_interval_seconds,
+    flush_interval_seconds=config.flush_interval_seconds,
+    health_check_interval_seconds=config.channel_health_check_interval_seconds,
+    max_videos_per_fetch=config.max_videos_per_channel_fetch,
+)
 
-
+# Runtime state for the feedback consumer. Reported verbatim by /api/v1/tasks/status
+# so a deployment can tell the difference between "consuming feedback" and
+# "the loop is silently open".
 _consumer_state: dict[str, Any] = {
-    "status": "not_started",
+    "status": "stopped",
     "subject": PUBLICATION_PUBLISHED_SUBJECT,
-    "durable_name": DURABLE_NAME,
+    "durable": DURABLE_NAME,
     "error": None,
 }
-
-
-def _record_consumer_state(status: str, error: str | None = None) -> None:
-    _consumer_state["status"] = status
-    _consumer_state["error"] = error
-    _consumer_state["updated_at"] = datetime.now(timezone.utc).isoformat()
+_nats_client: Any = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Start the feedback consumer and the periodic fetch, and stop them cleanly."""
-    nats_client = None
-    try:
-        from analytics_ingestion.consumers import start_publication_consumer
-
-        nats_client, _consumer = await start_publication_consumer()
-        _record_consumer_state("running")
-    except Exception as exc:  # pragma: no cover - depends on broker availability
-        logger.error("Failed to start publication consumer: %s", exc)
-        _record_consumer_state("failed", str(exc))
-
+    global _nats_client
+    await writer.start()
     if config.enable_background_ingestion:
-        try:
-            await scheduler.start()
-        except Exception as exc:  # pragma: no cover
-            logger.error("Failed to start background ingestion: %s", exc)
-
+        await scheduler.start()
+    try:
+        _nats_client, _consumer = await start_publication_consumer()
+        _consumer_state.update(status="running", error=None)
+    except Exception as exc:  # never claim feedback we do not have
+        _consumer_state.update(status="failed", error=str(exc))
+        logger.error("analytics feedback consumer failed to start: %s", exc, exc_info=True)
+    logger.info("Analytics Ingestion Service started")
     yield
-
-    await scheduler.stop()
-    if nats_client is not None:
+    if config.enable_background_ingestion:
+        await scheduler.stop()
+    if _nats_client is not None:
         try:
-            await nats_client.close()
-        except Exception as exc:  # pragma: no cover
-            logger.warning("Error closing NATS client: %s", exc)
+            await _nats_client.close()
+        except Exception as exc:
+            logger.warning("NATS client close failed: %s", exc)
+    await writer.stop()
+    await yt_client.close()
+    logger.info("Analytics Ingestion Service stopped")
 
 
 app = FastAPI(
@@ -127,25 +137,3 @@ def _verify_tenant_assertion(request: Request, asserted: str | None) -> str:
                 detail="requested tenant does not match the authenticated tenant",
             )
     return acting
-
-
-@app.get("/health")
-async def health() -> dict[str, Any]:
-    return {"status": "ok", "service": config.service_name}
-
-
-@app.get("/ready")
-async def ready() -> dict[str, Any]:
-    return {
-        "status": "ready",
-        "feedback_consumer": dict(_consumer_state),
-    }
-
-
-@app.get("/api/v1/tasks/status")
-async def get_task_status() -> dict[str, Any]:
-    """Report the real state of background tasks and the feedback consumer."""
-    return {
-        "tasks": scheduler.status(),
-        "feedback_consumer": dict(_consumer_state),
-    }
